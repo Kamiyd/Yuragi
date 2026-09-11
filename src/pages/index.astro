@@ -1,0 +1,26 @@
+---
+import EditorApp from "../components/EditorApp";
+import "../styles/editor.css";
+
+const title = "手写字 · 骨架编辑器";
+const description = "把一句中文画成手写感的 SVG 字：一笔一笔的骨架 + 一层统一的抖动滤镜。整条流水线跑在浏览器里，不上传任何东西。";
+---
+
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f6f6f3" />
+    <meta name="description" content={description} />
+    <meta name="color-scheme" content="light" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta name="twitter:card" content="summary" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <EditorApp client:load />
+  </body>
+</html>

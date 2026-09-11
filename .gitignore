@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.astro/
+.DS_Store
+.vercel/
+tools/parity/fixtures.json
+reference-python/__pycache__/
+.env
+.env.*

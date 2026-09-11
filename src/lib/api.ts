@@ -14,9 +14,9 @@
    道理很简单 —— 渐变工具的输入是七个数，丢了重拨二十秒；这里的输入是你一笔一笔
    描出来的骨架，一句话小半小时。参数可以不存，创作的内容不能不存。
 
-   **产品只做单行。** core 里的 writeLines（`/` 断行、多行同一个 viewBox）保留着，
-   它是 handdraw.py write 的镜像、对照测试还在跑；但界面不接它 ——
-   对齐、行距、段落是下游的事，这支笔只管把一行字写出来。 */
+   **产品输入是一段文字，但预览会按可用宽度自动换行。** core 里的 writeLines（`/` 断行、
+   多行同一个 viewBox）保留着，它是 handdraw.py write 的镜像、对照测试还在跑；编辑器的
+   行预览则用自己的最大宽度重新排版，保持字号不变。 */
 import { loadGeo, serializeGeoFile, type GlyphLibrary } from "./core/library";
 import { render, renderRow } from "./core/render";
 
@@ -79,13 +79,13 @@ export function importDocument(name: string, text: string): void {
 }
 
 /** 把这一版交给用户：下载几何 JSON —— 它仍然是唯一的真相层。 */
-export function downloadDocument() {
+export function downloadDocument(filename?: string) {
   const doc = readDoc();
   const blob = new Blob([doc.text], { type: "application/json;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = doc.name;
+  a.download = filename || doc.name;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -98,7 +98,7 @@ type RenderRequest = {
 type RowRequest = {
   text: string; seed?: number; ampk?: number; mode?: "han" | "latin"; amp?: number; over?: number;
   vary?: boolean; varyk?: number; glyphSeeds?: Record<string, number> | null;
-  glyphData?: GlyphLibrary; track?: number | null; word?: number;
+  glyphData?: GlyphLibrary; track?: number | null; word?: number; maxWidth?: number | null; lineHeight?: number;
 };
 
 /** 原来那个 fetch 包装的位置换成本地调用；接口形状一模一样。 */
@@ -132,6 +132,8 @@ export async function requestJSON<T>(url: string, init?: RequestInit): Promise<T
       glyphData: req.glyphData,
       track: req.track ?? null,
       word: req.word === undefined ? undefined : Number(req.word),
+      maxWidth: req.maxWidth === undefined || req.maxWidth === null ? null : Number(req.maxWidth),
+      lineHeight: req.lineHeight === undefined ? undefined : Number(req.lineHeight),
     }) as T;
   }
   if (route === "/api/save") {

@@ -99,8 +99,13 @@ reference-python/    原始 Python 实现，只用来生成标准结果
 
 ## 产物规格
 
-`viewBox 0 0 64 64`（一字一格）· `fill="none"` · `stroke="currentColor"` ·
-`stroke-width 2.8` · `round` cap + join。颜色跟着父元素走，亮暗主题不需要两份 SVG。
+画布内部单字使用 `viewBox 0 0 64 64`（一字一格）· `fill="none"` ·
+`stroke-width 2.8` · `round` cap + join。浏览器内部预览可以用 `currentColor`
+跟随父元素换色；下载 SVG
+会在导出边界把 `stroke` / `fill` 展开成显式颜色，兼容 Figma 等导入器。单字 SVG
+沿用整段导出的「根 Frame + 单字 `<g>`」层级，导入 Figma 后可直接选中字形 Group，
+编辑整体线宽和颜色，不需要取消组合；每一笔仍保留为独立 Vector，PNG 也保留逐笔线重，
+亮暗主题不需要两份 SVG。
 
 **尺寸下限 44px。** 汉字的笔画密度摆在那儿 —— 「露」有 20 多笔挤在同一个格子里，
 30px 起复杂字开始糊。用在正文尺寸上就别用这支笔。

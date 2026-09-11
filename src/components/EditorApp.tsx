@@ -18,6 +18,7 @@ import {
   CrossCross as Cross2Icon,
   DeleteDustbin as TrashIcon,
   Download01 as DownloadIcon,
+  FileFile as ProjectFileIcon,
   MinusMinus as MinusIcon,
 } from "pikaicons";
 import DraggableInput from "./DraggableInput";
@@ -70,6 +71,10 @@ type RowMode = "library" | "custom";
 type EditorConfig = {
   rowMode?: RowMode;
   rowText?: string;
+  /** 文档级画布视图开关；不随当前单字切换。 */
+  underlay?: boolean;
+  showGrid?: boolean;
+  showSkeleton?: boolean;
   ink?: Record<string, InkStyle>;
   export?: {
     scope?: ExportScope;
@@ -122,13 +127,19 @@ type GlyphDragState = {
   active: boolean;
 };
 
+type PreviewResizeState = {
+  pointerId: number;
+  startY: number;
+  startHeight: number;
+};
+
 type RenderPath = { d: string; f?: boolean; w?: number };
 /** 这一版墨线里哪些是刚长出来的（淡入），哪些是刚被撤掉的（留个影子淡出）。 */
 type InkFade = { enter: Set<string>; leave: RenderPath[] };
 
 /** 整行渲染的返回。右边那张逐字大小表就是靠 table 画的。 */
 type RowCell = { name: string | null; s: number; diff: number | null; thin: boolean };
-type RowResult = { svg: string; table: RowCell[]; miss: string[]; ratio: number; vb?: [number, number] };
+type RowResult = { svg: string; table: RowCell[]; miss: string[]; ratio: number; vb?: [number, number]; lineCount?: number };
 type PointTarget = { si: number; gi?: number };
 type SaveOptions = { preserveCanvasUnsaved?: boolean };
 type RightPanelPatch = (glyphs: GlyphLibrary) => GlyphLibrary;
@@ -174,6 +185,22 @@ const DEFAULT_INK_STYLE: InkStyle = { color: DEFAULT_INK_COLOR, opacity: DEFAULT
    这边到点就把影子从 DOM 里摘掉，CSS 拖得更长的话动画会被砍断。 */
 const INK_FADE_MS = 220;
 const DEFAULT_VIEW_SEED = 42;
+const PREVIEW_MIN_HEIGHT = 88;
+// 预览高度最多容纳约四行；更多内容在预览区内部滚动。
+const PREVIEW_MAX_HEIGHT = 248;
+const PREVIEW_STAGE_RESERVE = 160;
+
+function previewHeightBounds(): [number, number] {
+  const max = typeof window === "undefined"
+    ? PREVIEW_MAX_HEIGHT
+    : Math.min(PREVIEW_MAX_HEIGHT, Math.max(PREVIEW_MIN_HEIGHT, window.innerHeight - PREVIEW_STAGE_RESERVE));
+  return [PREVIEW_MIN_HEIGHT, max];
+}
+
+function clampPreviewHeight(value: number) {
+  const [min, max] = previewHeightBounds();
+  return Math.round(Math.max(min, Math.min(max, value)));
+}
 const DEFAULT_ROW_TRACK = 7;
 const DEFAULT_HAN_ROW_TRACK = 0;
 const EXPORT_SCALES = ["0.5", "1", "2", "3", "4"] as const;
@@ -341,6 +368,9 @@ function readEditorConfig(value: unknown): EditorConfig {
   const next: EditorConfig = {};
   if (record.rowMode === "library" || record.rowMode === "custom") next.rowMode = record.rowMode;
   if (record.rowText !== undefined) next.rowText = String(record.rowText || "").replace(/[\/\n]/g, "");
+  if (typeof record.underlay === "boolean") next.underlay = record.underlay;
+  if (typeof record.showGrid === "boolean") next.showGrid = record.showGrid;
+  if (typeof record.showSkeleton === "boolean") next.showSkeleton = record.showSkeleton;
 
   if (record.ink && typeof record.ink === "object") {
     const ink: Record<string, InkStyle> = {};
@@ -387,96 +417,29 @@ function tintSvg(svg: string, color: string, opacity = 1) {
   const safeOpacity = clampOpacity(opacity);
   return svg.replace(/<svg\b([^>]*)>/i, (_match, attributes: string) => {
     const withoutColor = attributes.replace(/\scolor="[^"]*"/i, "").replace(/\sopacity="[^"]*"/i, "");
-    return `<svg${withoutColor} color="${safeColor}" opacity="${safeOpacity.toFixed(3)}">`;
+    // `currentColor` is convenient in the browser, but Figma's SVG importer
+    // does not reliably resolve it from a root `color` presentation attribute.
+    // Make the root paint explicit while retaining `color` for the live
+    // preview/showcase code that reads the computed ink color.
+    const compatibleAttributes = withoutColor.replace(
+      /\b(stroke|fill)="currentColor"/gi,
+      (_paint, property) => `${property}="${safeColor}"`,
+    );
+    return `<svg${compatibleAttributes} color="${safeColor}" opacity="${safeOpacity.toFixed(3)}">`;
   });
 }
 
-/*
- * 导出沿用迁移前编辑器的两个约定：单字文件不逐个触发下载，而是放进一个
- * 无压缩 ZIP；整行则直接保存行预览那张 SVG。这样下载的整行和下面看到
- * 的行预览是同一份路径、同一组 transform，不会因为客户端再拼一次而漂移。
- */
+/** 将一组路径里的 currentColor 解析成显式颜色，保证 SVG 导入器能读到。 */
+function explicitSvgPaint(markup: string, color: string) {
+  const safeColor = normalizeHexColor(color);
+  return markup.replace(
+    /\b(stroke|fill)="currentColor"/gi,
+    (_paint, property) => `${property}="${safeColor}"`,
+  );
+}
+
+/* 导出：单字导出当前选中的字形，整段导出单独保持一行连续排版。 */
 const UTF8 = new TextEncoder();
-const ZIP_CRC_TABLE = new Uint32Array(256);
-for (let index = 0; index < ZIP_CRC_TABLE.length; index += 1) {
-  let value = index;
-  for (let bit = 0; bit < 8; bit += 1) value = (value & 1) ? (0xedb88320 ^ (value >>> 1)) : (value >>> 1);
-  ZIP_CRC_TABLE[index] = value >>> 0;
-}
-
-function crc32(data: Uint8Array) {
-  let value = 0xffffffff;
-  for (const byte of data) value = ZIP_CRC_TABLE[(value ^ byte) & 0xff] ^ (value >>> 8);
-  return (value ^ 0xffffffff) >>> 0;
-}
-
-function concatBytes(parts: Uint8Array[]) {
-  const output = new Uint8Array(parts.reduce((total, part) => total + part.byteLength, 0));
-  let offset = 0;
-  for (const part of parts) {
-    output.set(part, offset);
-    offset += part.byteLength;
-  }
-  return output;
-}
-
-function zipStore(files: Array<{ name: string; data: Uint8Array }>) {
-  const now = new Date();
-  const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | Math.floor(now.getSeconds() / 2);
-  const dosDate = ((Math.max(1980, now.getFullYear()) - 1980) << 9)
-    | ((now.getMonth() + 1) << 5) | now.getDate();
-  const locals: Uint8Array[] = [];
-  const central: Uint8Array[] = [];
-  let offset = 0;
-
-  for (const file of files) {
-    const name = UTF8.encode(file.name);
-    const data = file.data;
-    const crc = crc32(data);
-
-    const local = new Uint8Array(30 + name.length);
-    const localView = new DataView(local.buffer);
-    localView.setUint32(0, 0x04034b50, true);
-    localView.setUint16(4, 20, true);
-    localView.setUint16(6, 0x800, true);
-    localView.setUint16(10, dosTime, true);
-    localView.setUint16(12, dosDate, true);
-    localView.setUint32(14, crc, true);
-    localView.setUint32(18, data.length, true);
-    localView.setUint32(22, data.length, true);
-    localView.setUint16(26, name.length, true);
-    local.set(name, 30);
-    locals.push(local, data);
-
-    const entry = new Uint8Array(46 + name.length);
-    const entryView = new DataView(entry.buffer);
-    entryView.setUint32(0, 0x02014b50, true);
-    entryView.setUint16(4, 20, true);
-    entryView.setUint16(6, 20, true);
-    entryView.setUint16(8, 0x800, true);
-    entryView.setUint16(12, dosTime, true);
-    entryView.setUint16(14, dosDate, true);
-    entryView.setUint32(16, crc, true);
-    entryView.setUint32(20, data.length, true);
-    entryView.setUint32(24, data.length, true);
-    entryView.setUint16(28, name.length, true);
-    entryView.setUint32(42, offset, true);
-    entry.set(name, 46);
-    central.push(entry);
-    offset += local.length + data.length;
-  }
-
-  const centralBytes = concatBytes(central);
-  const end = new Uint8Array(22);
-  const endView = new DataView(end.buffer);
-  endView.setUint32(0, 0x06054b50, true);
-  endView.setUint16(8, files.length, true);
-  endView.setUint16(10, files.length, true);
-  endView.setUint32(12, centralBytes.length, true);
-  endView.setUint32(16, offset, true);
-  return concatBytes([...locals, centralBytes, end]);
-}
-
 function exportSafeName(value: string) {
   return String(value).replace(/[\u0000-\u001f\\/:*?"<>|]/g, "_").trim() || "glyph";
 }
@@ -540,7 +503,27 @@ function glyphInfo(name: string) {
 function glyphLabel(name: string) {
   if (isDraftGlyph(name)) return "";
   const info = glyphInfo(name);
-  return info.variant > 1 ? `${info.base} · 第 ${info.variant} 个` : info.base;
+  return info.variant > 1 ? `${info.base} #${info.variant}` : info.base;
+}
+
+function orderedProjectFilename(names: string[]) {
+  const stem = names
+    .filter((name) => !isDraftGlyph(name))
+    .map(glyphLabel)
+    .filter(Boolean)
+    .join("");
+  return `${exportSafeName(stem || "手写字")}.json`;
+}
+
+function GlyphLabel({ name, className = "glyph-label" }: { name: string; className?: string }) {
+  if (isDraftGlyph(name)) return null;
+  const info = glyphInfo(name);
+  return (
+    <span className={className}>
+      {info.base}
+      {info.variant > 1 && <small>#{info.variant}</small>}
+    </span>
+  );
 }
 
 function nextGlyphVariantName(items: Record<string, EditableElement[]>, name: string) {
@@ -805,12 +788,89 @@ function renderBody(group: GlyphLibrary, name: string, index: number) {
   });
 }
 
+type SvgBounds = { x: number; y: number; width: number; height: number };
+
+function svgNumber(value: number) {
+  const rounded = Number(value.toFixed(3));
+  return Object.is(rounded, -0) ? "0" : String(rounded);
+}
+
+/** 单字导出只保留笔画范围，避免 Figma 把整块 64×64 画布当成外框。 */
+function measureGlyphBounds(paths: RenderPath[], group: GlyphLibrary): SvgBounds {
+  const fallback = { x: 0, y: 0, width: group.vb, height: group.vb };
+  if (typeof document === "undefined" || !document.body || paths.length === 0) return fallback;
+
+  const svgNs = "http://www.w3.org/2000/svg";
+  const host = document.createElement("div");
+  host.style.cssText = "position:absolute;left:-100000px;top:-100000px;width:1px;height:1px;visibility:hidden;pointer-events:none";
+  const svg = document.createElementNS(svgNs, "svg");
+  const drawing = document.createElementNS(svgNs, "g");
+  svg.setAttribute("viewBox", `0 0 ${group.vb} ${group.vb}`);
+  svg.setAttribute("width", "1");
+  svg.setAttribute("height", "1");
+  drawing.setAttribute("fill", "none");
+  drawing.setAttribute("stroke-linecap", "round");
+  drawing.setAttribute("stroke-linejoin", "round");
+
+  let strokePadding = 0;
+  for (const path of paths) {
+    const element = document.createElementNS(svgNs, "path");
+    element.setAttribute("d", path.d);
+    if (path.f) {
+      element.setAttribute("fill", "#000000");
+      element.setAttribute("stroke", "none");
+    } else {
+      const width = group.sw * (path.w || 1);
+      element.setAttribute("fill", "none");
+      element.setAttribute("stroke", "#000000");
+      element.setAttribute("stroke-width", String(width));
+      strokePadding = Math.max(strokePadding, width / 2);
+    }
+    drawing.appendChild(element);
+  }
+
+  svg.appendChild(drawing);
+  host.appendChild(svg);
+  document.body.appendChild(host);
+
+  let bounds: DOMRect;
+  try {
+    bounds = drawing.getBBox();
+  } catch {
+    host.remove();
+    return fallback;
+  }
+  host.remove();
+
+  if (![bounds.x, bounds.y, bounds.width, bounds.height].every(Number.isFinite)
+    || bounds.width <= 0 || bounds.height <= 0) return fallback;
+
+  const x = bounds.x - strokePadding;
+  const y = bounds.y - strokePadding;
+  return {
+    x,
+    y,
+    width: bounds.width + strokePadding * 2,
+    height: bounds.height + strokePadding * 2,
+  };
+}
+
 function glyphExportSvg(paths: RenderPath[], group: GlyphLibrary, scale: number, color = DEFAULT_INK_COLOR, opacity = DEFAULT_INK_OPACITY) {
-  const size = Math.max(1, Math.round(group.vb * scale));
+  const bounds = measureGlyphBounds(paths, group);
+  const width = Math.max(1, Math.round(bounds.width * scale));
+  const height = Math.max(1, Math.round(bounds.height * scale));
+  const safeColor = normalizeHexColor(color);
+  const safeOpacity = clampOpacity(opacity);
+  // 和整段导出的 DOM 保持同一层级：SVG 根节点是 Figma 的外层 Frame，
+  // 唯一的字形放在一个可直接选中的 Group 里；笔画仍然各自保留为 Vector。
   const body = paths.map((path) => path.f
-    ? `<path d="${path.d}" fill="currentColor" stroke="none"/>`
+    ? `<path d="${path.d}" fill="${safeColor}" stroke="none"/>`
     : `<path d="${path.d}"${path.w ? ` stroke-width="${(group.sw * path.w).toFixed(3)}"` : ""}/>`).join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${group.vb} ${group.vb}" fill="none" stroke="currentColor" stroke-width="${group.sw}" stroke-linecap="round" stroke-linejoin="round" color="${normalizeHexColor(color)}" opacity="${clampOpacity(opacity).toFixed(3)}">${body}</svg>`;
+  const glyph = `<g transform="translate(0 0)" color="${safeColor}" opacity="${safeOpacity.toFixed(3)}" stroke="${safeColor}">${body}</g>`;
+  return {
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${svgNumber(bounds.x)} ${svgNumber(bounds.y)} ${svgNumber(bounds.width)} ${svgNumber(bounds.height)}" fill="none" stroke="${safeColor}" stroke-width="${group.sw}" stroke-linecap="round" stroke-linejoin="round" color="${safeColor}" opacity="1.000">${glyph}</svg>`,
+    bounds,
+  };
 }
 
 async function renderExportGlyph(group: GlyphLibrary, name: string, glyphIndex: number, format: ExportFormat, scale: number, color = DEFAULT_INK_COLOR, opacity = DEFAULT_INK_OPACITY) {
@@ -826,9 +886,12 @@ async function renderExportGlyph(group: GlyphLibrary, name: string, glyphIndex: 
       localSeed: group.glyphSeeds[name] ?? null,
     }),
   })).paths || [];
-  const svg = glyphExportSvg(paths, group, scale, color, opacity);
-  if (format === "svg") return UTF8.encode(svg);
-  return new Uint8Array(await (await svgToPng(svg, Math.max(1, Math.round(group.vb * scale)))).arrayBuffer());
+  // 单字 SVG 复用整段导出的「根 Frame + 字形 Group」层级；PNG 仍保留逐笔线重。
+  const rendered = glyphExportSvg(paths, group, scale, color, opacity);
+  if (format === "svg") return UTF8.encode(rendered.svg);
+  const width = Math.max(1, Math.round(rendered.bounds.width * scale));
+  const height = Math.max(1, Math.round(rendered.bounds.height * scale));
+  return new Uint8Array(await (await svgToPng(rendered.svg, width, height)).arrayBuffer());
 }
 
 function rowExportBox(result: RowResult): [number, number] {
@@ -852,22 +915,27 @@ function colorizeRowSvg(svg: string, styles: InkStyle[] = []) {
     /<g transform="([^"]*)">([\s\S]*?)<\/g>/g,
     (_match, transform, body) => {
       const style = styles[glyphIndex++] || DEFAULT_INK_STYLE;
-      return `<g transform="${transform}" color="${style.color}" opacity="${style.opacity.toFixed(3)}">${body}</g>`;
+      // Keep `color` for CSS/computed-style consumers, but put the actual
+      // paint on the glyph group and filled paths so Figma gets the same ink.
+      return `<g transform="${transform}" color="${style.color}" opacity="${style.opacity.toFixed(3)}" stroke="${style.color}">${explicitSvgPaint(body, style.color)}</g>`;
     },
   );
 }
 
-function rowPreviewSvg(svg: string, height: number, ratio: number, playing: boolean, styles: InkStyle[] = []) {
+function rowPreviewSvg(svg: string, height: number, ratio: number, lineCount: number, playing: boolean, styles: InkStyle[] = []) {
+  const lines = Math.max(1, Math.trunc(lineCount || 1));
+  // 多行 SVG 的总高度按“每行字号 + 行距”给，不能把整段再次压回一个 44px 高的框。
+  const totalHeight = height * lines + Math.max(0, lines - 1) * 4;
   const sized = colorizeRowSvg(svg, styles).replace(
     "<svg",
-    `<svg height="${height}" width="${(height * (ratio || 1)).toFixed(1)}"`,
+    `<svg height="${totalHeight}" width="${(totalHeight * (ratio || 1)).toFixed(1)}"`,
   );
   const withFilter = sized.replace(
     /(<svg\b[^>]*>)/,
     `$1<defs>${previewBoilFilterMarkup("preview-boil-row", 3.4)}</defs>`,
   );
-  return withFilter.replace(/<g transform="([^"]*)" color="([^"]*)" opacity="([^"]*)">([\s\S]*?)<\/g>/g, (_match, transform, color, opacity, body) => (
-    `<g transform="${transform}" color="${color}" opacity="${opacity}"><g class="preview-glyph"${playing ? ` filter="url(#preview-boil-row)"` : ""}>${body}</g></g>`
+  return withFilter.replace(/<g transform="([^"]*)" color="([^"]*)" opacity="([^"]*)" stroke="([^"]*)">([\s\S]*?)<\/g>/g, (_match, transform, color, opacity, stroke, body) => (
+    `<g transform="${transform}" color="${color}" opacity="${opacity}" stroke="${stroke}"><g class="preview-glyph"${playing ? ` filter="url(#preview-boil-row)"` : ""}>${body}</g></g>`
   ));
 }
 
@@ -1737,7 +1805,7 @@ const MemoCanvasArtwork = React.memo(CanvasArtwork, (previous, next) => (
   && previous.svgRef === next.svgRef
 ));
 
-/** 画布下方那条工具条上的按钮。 */
+/** 工具栏上的显示开关按钮；显示开关属于编辑器视图，不绑定到某个字形。 */
 function ToolButton({
   label,
   active,
@@ -1837,6 +1905,7 @@ export default function EditorApp() {
   const [selectedPoint, setSelectedPoint] = React.useState<PointTarget | null>(null);
   const [drawMode, setDrawModeState] = React.useState(false);
   const [traceMode, setTraceMode] = React.useState<"smart" | "original">("smart");
+  const [draftStartPending, setDraftStartPending] = React.useState(false);
   const [tracePoints, setTracePoints] = React.useState<Point[]>([]);
   const [traceStatus, setTraceStatus] = React.useState("");
   const [showGrid, setShowGrid] = React.useState(true);
@@ -1847,8 +1916,11 @@ export default function EditorApp() {
   const [zoom, setZoom] = React.useState(1);
   const [previewPlaying, setPreviewPlaying] = React.useState(false);
   const [viewSeed, setViewSeed] = React.useState(DEFAULT_VIEW_SEED);
-  const [rowOpen, setRowOpen] = React.useState(true);
+  // 默认只给一行的预览空间，用户拖动后再展开到更多行。
+  const [previewHeight, setPreviewHeight] = React.useState<number | null>(PREVIEW_MIN_HEIGHT);
+  const [previewResizing, setPreviewResizing] = React.useState(false);
   const [rowTrack, setRowTrack] = React.useState(DEFAULT_ROW_TRACK);
+  const [rowPreviewWidth, setRowPreviewWidth] = React.useState(0);
   // 右栏的预览种子、排版文本/模式也属于字库配置；它们不再只存在于会话状态。
   const [liveAdvances, setLiveAdvances] = React.useState<Record<string, number>>({});
   const [showcase, setShowcase] = React.useState<{ svg: string; ratio: number } | null>(null);
@@ -1899,6 +1971,11 @@ export default function EditorApp() {
   const viewportRef = React.useRef<HTMLDivElement | null>(null);
   const helpRef = React.useRef<HTMLDivElement | null>(null);
   const batchAddMenuRef = React.useRef<HTMLDivElement | null>(null);
+  const previewBarRef = React.useRef<HTMLDivElement | null>(null);
+  const rowArtRef = React.useRef<HTMLDivElement | null>(null);
+  const previewResizeRef = React.useRef<PreviewResizeState | null>(null);
+  const previewResizeHeightRef = React.useRef<number | null>(null);
+  const previewResizeFrameRef = React.useRef<number | null>(null);
   const addMenuClickTimerRef = React.useRef<number | null>(null);
   const tracePointerIdRef = React.useRef<number | null>(null);
   const tracePointsRef = React.useRef<Point[]>([]);
@@ -1939,6 +2016,7 @@ export default function EditorApp() {
   ), [rowResult, inkStyleFor]);
   const visibleNames = dragOrder || names;
   const glyphOrderKey = visibleNames.join("\u0000");
+  const projectFilename = orderedProjectFilename(visibleNames);
 
   /* 用 FLIP 让被挤开的行走一小段柔和的位移，而不是 React 重新排键后
      直接瞬移。用 CSS transition 而不是逐个堆 Web Animations，兼容编辑器
@@ -2089,6 +2167,21 @@ export default function EditorApp() {
   const reloadDocument = React.useCallback(() => {
     setLoading(true);
     setError("");
+    // 新工程切换时，旧字库的墨线不会随着空 items 自动消失：空库没有
+    // currentRenderBody，也就没有后续渲染请求来覆盖旧的 ink。先清空画布
+    // 和交互状态，保证加载期间以及新库落地后都不会残留上一份内容。
+    setInk([]);
+    setInkFade(null);
+    setTraceEcho([]);
+    setTracePoints([]);
+    setTraceStatus("");
+    setSelectedStrokes([]);
+    setSelectedPoint(null);
+    setMarquee(null);
+    setDrawModeState(false);
+    tracePointerIdRef.current = null;
+    tracePointsRef.current = [];
+    marqueeRef.current = null;
     setLibraryRevision((value) => value + 1);
   }, []);
 
@@ -2105,7 +2198,6 @@ export default function EditorApp() {
     if (!file) return;
     try {
       const text = await file.text();
-      if (!window.confirm(`打开「${file.name}」会替换当前这一份，确定？`)) return;
       importDocument(file.name, text);
       reloadDocument();
     } catch (reason) {
@@ -2113,27 +2205,46 @@ export default function EditorApp() {
     }
   }, [reloadDocument]);
 
+  const handleDocumentImportClick = React.useCallback(() => {
+    if (!window.confirm("导入会替换当前这一份。没下载过的话就找不回来了，确定？")) return;
+    libraryFileRef.current?.click();
+  }, []);
+
   React.useEffect(() => {
     requestJSON<GeoPayload>("/api/geo")
       .then((payload) => {
         const firstGlyph = Object.keys(payload.glyphs?.items || {})[0] || "";
+        // 空字库也要有一个可交互的目标：先放入 UI 草稿，让新建后马上进入
+        // “输入首字 → 选择落笔方式 → 开始描摹”的流程，而不是落笔到空 key 上。
+        const initialGlyphName = firstGlyph || nextDraftGlyphName(payload.glyphs.items);
+        const initialPayload = firstGlyph ? payload : {
+          ...payload,
+          glyphs: {
+            ...payload.glyphs,
+            items: { ...payload.glyphs.items, [initialGlyphName]: [] },
+          },
+        };
         const savedGlyphs = clone(payload.glyphs);
         const editor = readEditorConfig(payload.glyphs?.editor);
-        setGeo(payload);
+        setGeo(initialPayload);
         savedGlyphsRef.current = savedGlyphs;
         setSavedPreviewGlyphs(savedGlyphs);
         canvasDirtyRef.current = false;
         rightPanelSaveTargetRef.current = null;
         rightPanelSaveInFlightTargetRef.current = null;
         setHasUnsavedChanges(false);
-        setGlyphName(firstGlyph);
+        setGlyphName(initialGlyphName);
+        setDraftStartPending(!firstGlyph || isDraftGlyph(firstGlyph));
         setLiveAdvances({});
-        setReferenceText(glyphInfo(firstGlyph).base);
+        setReferenceText(firstGlyph ? glyphInfo(firstGlyph).base : "");
         setRowTrack(Number.isFinite(Number(payload.glyphs?.track))
           ? Number(payload.glyphs.track)
           : libraryIsLatin(payload.glyphs) ? DEFAULT_ROW_TRACK : DEFAULT_HAN_ROW_TRACK);
         /* 换一份工程就是换一套设置：新文件没写的字段要回默认，不能沿用上一份。
            不复位的话，新建的空库会顶着上一份的种子开局。 */
+        setUnderlay(editor.underlay ?? true);
+        setShowGrid(editor.showGrid ?? true);
+        setShowSkeleton(editor.showSkeleton ?? true);
         setExportScope(editor.export?.scope ?? "row");
         setExportFormat(editor.export?.format ?? "png");
         setExportScale(editor.export?.scale ?? "1");
@@ -2184,6 +2295,34 @@ export default function EditorApp() {
   const inkFadeWantedRef = React.useRef(0);
   const inkFadeTimerRef = React.useRef<number | null>(null);
   const previousInkRef = React.useRef<RenderPath[]>([]);
+
+  // reloadDocument 会把 libraryRevision 加一。作废旧字库尚未返回的渲染，
+  // 否则它可能在新库已经显示后把上一份字的墨线写回来；行预览同理。
+  React.useEffect(() => {
+    renderSeqRef.current += 1;
+    renderPendingRef.current = null;
+    renderLastSentRef.current = "";
+    renderErroredRef.current = false;
+    if (renderTimerRef.current !== null) {
+      window.clearTimeout(renderTimerRef.current);
+      renderTimerRef.current = null;
+    }
+    previousInkRef.current = [];
+    inkFadeWantedRef.current = 0;
+    if (inkFadeTimerRef.current !== null) {
+      window.clearTimeout(inkFadeTimerRef.current);
+      inkFadeTimerRef.current = null;
+    }
+
+    rowSeqRef.current += 1;
+    rowPendingRef.current = null;
+    rowLastSentRef.current = "";
+    if (rowTimerRef.current !== null) {
+      window.clearTimeout(rowTimerRef.current);
+      rowTimerRef.current = null;
+    }
+    setRowResult(null);
+  }, [libraryRevision]);
 
   const applyInk = React.useCallback((paths: RenderPath[]) => {
     const previous = previousInkRef.current;
@@ -2288,6 +2427,10 @@ export default function EditorApp() {
      用哪一份是 pick() 按变体顺序轮换的 —— 规则确定，但用户看不见，
      看不见的规则比没有规则更糟。所见即所得，歧义自己消失。 */
   const rowLine = defaultRowLine;
+  const selectedExportGlyph = glyphName && !isDraftGlyph(glyphName) && glyphs && Object.hasOwn(glyphs.items, glyphName)
+    ? glyphName
+    : "";
+  const selectedExportGlyphLabel = selectedExportGlyph ? glyphLabel(selectedExportGlyph) : "未选择字形";
   const rowPreviewItems = Object.fromEntries(
     names.filter((name) => !isDraftGlyph(name)).map((name) => {
       const savedItems = savedPreviewGlyphs?.items[name] || glyphs?.items[name] || [];
@@ -2298,6 +2441,10 @@ export default function EditorApp() {
       return [name, items];
     }),
   );
+  /* core 用实际渲染后的 viewBox 宽高来判断换行，这里只传预览区的真实像素宽度。
+     这样拉丁窄体、矮体不会被固定的“每字多少单位”误判。 */
+  // 只留很小的边界余量，避免在接近容器边缘时过早换行造成大块空白。
+  const rowMaxWidth = rowPreviewWidth > 0 ? Math.max(96, rowPreviewWidth - 2) : null;
   const rowBody = rowLine && glyphs ? JSON.stringify({
     glyphData: {
       vb: glyphs.vb,
@@ -2316,6 +2463,8 @@ export default function EditorApp() {
     vary: true,
     varyk: glyphs.vary,
     glyphSeeds: glyphs.glyphSeeds,
+    maxWidth: rowMaxWidth,
+    lineHeight: viewHeight,
   }) : "";
 
   const rowDesiredRef = React.useRef(rowBody);
@@ -2490,6 +2639,14 @@ export default function EditorApp() {
       setSelectedPoint(null);
     }
   };
+
+  // 输入首字后直接把画布切进描摹态，用交互状态引导下一步，不额外弹提示。
+  React.useEffect(() => {
+    if (!draftStartPending || referenceNeedsEntry || drawMode) return;
+    setDrawModeState(true);
+    setTraceStatus("");
+    setDraftStartPending(false);
+  }, [draftStartPending, referenceNeedsEntry, drawMode]);
 
   /** 两个按钮既是落笔方式也是开关：点正在用的那种就收笔。 */
   const pickTraceMode = (mode: "smart" | "original") => {
@@ -2728,6 +2885,85 @@ export default function EditorApp() {
 
   const setZoomClamped = (next: number) => setZoom(Math.min(4, Math.max(0.25, Number(next.toFixed(3)))));
 
+  const startPreviewResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    const bar = previewBarRef.current;
+    if (!bar) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const startHeight = clampPreviewHeight(bar.getBoundingClientRect().height);
+    previewResizeRef.current = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startHeight,
+    };
+    previewResizeHeightRef.current = startHeight;
+    bar.style.height = `${startHeight}px`;
+    setPreviewHeight(startHeight);
+    setPreviewResizing(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const movePreviewResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    const resize = previewResizeRef.current;
+    if (!resize || resize.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const nextHeight = clampPreviewHeight(resize.startHeight - (event.clientY - resize.startY));
+    previewResizeHeightRef.current = nextHeight;
+    if (previewResizeFrameRef.current === null) {
+      previewResizeFrameRef.current = window.requestAnimationFrame(() => {
+        previewResizeFrameRef.current = null;
+        const bar = previewBarRef.current;
+        const height = previewResizeHeightRef.current;
+        if (bar && height !== null) bar.style.height = `${height}px`;
+      });
+    }
+  };
+
+  const endPreviewResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    const resize = previewResizeRef.current;
+    if (!resize || resize.pointerId !== event.pointerId) return;
+    previewResizeRef.current = null;
+    if (previewResizeFrameRef.current !== null) {
+      window.cancelAnimationFrame(previewResizeFrameRef.current);
+      previewResizeFrameRef.current = null;
+    }
+    const finalHeight = previewResizeHeightRef.current;
+    if (finalHeight !== null && previewBarRef.current) {
+      previewBarRef.current.style.height = `${finalHeight}px`;
+      setPreviewHeight(finalHeight);
+    }
+    previewResizeHeightRef.current = null;
+    setPreviewResizing(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const handlePreviewResizeKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const current = previewHeight
+      ?? previewBarRef.current?.getBoundingClientRect().height
+      ?? PREVIEW_MIN_HEIGHT;
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      event.preventDefault();
+      setPreviewHeight(clampPreviewHeight(current + (event.key === "ArrowUp" ? 8 : -8)));
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setPreviewHeight(previewHeightBounds()[0]);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setPreviewHeight(previewHeightBounds()[1]);
+    }
+  };
+
+  React.useEffect(() => {
+    const onResize = () => {
+      setPreviewHeight((value) => value === null ? value : clampPreviewHeight(value));
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   React.useEffect(() => {
     const element = viewportRef.current;
     if (!element) return;
@@ -2738,6 +2974,19 @@ export default function EditorApp() {
     observer.observe(element);
     return () => observer.disconnect();
   }, [loading]);
+
+  React.useEffect(() => {
+    const element = rowArtRef.current;
+    if (!element) return;
+    const update = (width: number) => {
+      const next = Math.max(0, Math.round(width));
+      setRowPreviewWidth((current) => current === next ? current : next);
+    };
+    update(element.getBoundingClientRect().width);
+    const observer = new ResizeObserver(([entry]) => update(entry.contentRect.width));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [loading, !!rowResult?.svg]);
 
   // ⌘/Ctrl + 滚轮缩放。
   React.useEffect(() => {
@@ -2975,6 +3224,26 @@ export default function EditorApp() {
     }));
   };
 
+  // 这三个开关属于当前工程的画布视图：按钮可以留在画布下方，但状态写在
+  // editor 配置里，所以切换单字不会各自记一份，也会随工程保存/恢复。
+  const toggleUnderlay = () => {
+    const next = !underlay;
+    setUnderlay(next);
+    updateEditorAndSave({ underlay: next });
+  };
+
+  const toggleGrid = () => {
+    const next = !showGrid;
+    setShowGrid(next);
+    updateEditorAndSave({ showGrid: next });
+  };
+
+  const toggleSkeleton = () => {
+    const next = !showSkeleton;
+    setShowSkeleton(next);
+    updateEditorAndSave({ showSkeleton: next });
+  };
+
   const updateInkStyle = (patch: Partial<InkStyle>) => {
     if (!currentInkKey || !geo?.glyphs || !glyphName) return;
     const previous = inkPreferences[currentInkKey] || DEFAULT_INK_STYLE;
@@ -3088,53 +3357,51 @@ export default function EditorApp() {
   const exportContent = async () => {
     const exportNames = names.filter((name) => !isDraftGlyph(name));
     if (!group || !exportNames.length || exportBusy) return;
+    if (exportScope === "glyphs" && (!selectedExportGlyph || !group.items[selectedExportGlyph]?.length)) {
+      setExportMessage("请先选择一个已有笔画的字形");
+      return;
+    }
     const format = exportFormat;
     const scale = format === "png" ? Number(exportScale) : 1;
     setExportBusy(true);
-    setExportMessage(exportScope === "glyphs" ? `准备 ${exportNames.length} 个单字…` : "准备整段预览…");
+    setExportMessage(exportScope === "glyphs" ? `准备导出 ${selectedExportGlyphLabel}…` : "准备整段预览…");
 
     try {
       const base = exportSafeName((geo.file.split("/").pop() || "glyphs").replace(/\.[^.]+$/, ""));
       const suffix = format === "svg" ? "SVG" : `${scale}x-PNG`;
 
       if (exportScope === "glyphs") {
-        const used = new Set<string>();
-        const files: Array<{ name: string; data: Uint8Array }> = [];
-        for (let index = 0; index < exportNames.length; index += 1) {
-          const name = exportNames[index];
-          const info = glyphInfo(name);
-          setExportMessage(`正在处理 ${index + 1}/${exportNames.length} · ${glyphLabel(name)}`);
-          const stem = exportSafeName(info.variant > 1 ? `${info.base}-v${info.variant}` : info.base);
-          let fileName = stem;
-          let collision = 2;
-          while (used.has(fileName)) fileName = `${stem}-${collision++}`;
-          used.add(fileName);
-          const style = inkStyleFor(name);
-          files.push({
-            name: `${fileName}.${format}`,
-            data: await renderExportGlyph(group, name, index, format, scale, style.color, style.opacity),
-          });
-        }
-        const zip = zipStore(files);
-        const filename = `${base}-glyphs-${suffix}.zip`;
-        downloadBlob(new Blob([zip], { type: "application/zip" }), filename);
-        setExportMessage(`已导出 ${files.length} 个单字文件`);
+        const name = selectedExportGlyph;
+        const info = glyphInfo(name);
+        setExportMessage(`正在处理 ${glyphLabel(name)}`);
+        const style = inkStyleFor(name);
+        const data = await renderExportGlyph(group, name, names.indexOf(name), format, scale, style.color, style.opacity);
+        const stem = exportSafeName(info.variant > 1 ? `${info.base}-v${info.variant}` : info.base);
+        const filename = `${stem}.${format}`;
+        const contentType = format === "svg" ? "image/svg+xml;charset=utf-8" : "image/png";
+        downloadBlob(new Blob([data], { type: contentType }), filename);
+        setExportMessage("");
         return;
       }
 
-      if (!rowResult?.svg) throw new Error("整段预览还没有生成");
-      const [rowWidth, rowHeight] = rowExportBox(rowResult);
+      if (!rowResult?.svg || !rowBody) throw new Error("整段预览还没有生成");
+      // 预览可以按容器宽度换行，但整段导出保持传统的一行连续排版。
+      const exportRowResult = await requestJSON<RowResult>("/api/row", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...JSON.parse(rowBody), maxWidth: null }),
+      });
+      const [rowWidth, rowHeight] = rowExportBox(exportRowResult);
       const outWidth = Math.max(1, Math.round(rowWidth * scale));
       const outHeight = Math.max(1, Math.round(rowHeight * scale));
-      // 关键点：不重新请求、不重新拼路径，直接下载当前行预览的 SVG。
-      const svg = addSvgSize(colorizeRowSvg(rowResult.svg, rowInkStyles), outWidth, outHeight);
+      const svg = addSvgSize(colorizeRowSvg(exportRowResult.svg, rowInkStyles), outWidth, outHeight);
       const filename = `${base}-row-${suffix}.${format}`;
       if (format === "svg") {
         downloadBlob(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }), filename);
       } else {
         downloadBlob(await svgToPng(svg, outWidth, outHeight), filename);
       }
-      setExportMessage("已导出当前整段预览");
+      setExportMessage("");
     } catch (reason) {
       setExportMessage(`导出失败：${reason instanceof Error ? reason.message : String(reason)}`);
     } finally {
@@ -3270,6 +3537,7 @@ export default function EditorApp() {
     updateGlyphs({ items: { ...glyphs.items, [nextName]: source } });
     setGlyphName(nextName);
     setReferenceText("");
+    setDraftStartPending(true);
     setSelectedStrokes([]);
     setSelectedPoint(null);
     return true;
@@ -3663,7 +3931,7 @@ export default function EditorApp() {
 
   return (
     <Tooltip.Provider delayDuration={350} skipDelayDuration={120}>
-      <div className="app" data-row-open={rowOpen} style={railStyle} onPointerDown={(event) => {
+      <div className="app" style={railStyle} onPointerDown={(event) => {
         const target = event.target as Element;
         if (!target.closest(".section-trigger-action")) clearAddMenuClickTimer();
         if (event.button !== 0 || drawMode) return;
@@ -3726,9 +3994,9 @@ export default function EditorApp() {
                   </span>
                 </div>
                 <div className="tools" role="group" aria-label="画布操作">
-                  <ToolButton label="印刷体底图" active={underlay} onClick={() => setUnderlay((value) => !value)}>{UnderIcon}</ToolButton>
-                  <ToolButton label="网格" active={showGrid} onClick={() => setShowGrid((value) => !value)}>{GridToolIcon}</ToolButton>
-                  <ToolButton label="骨架" active={showSkeleton} onClick={() => setShowSkeleton((value) => !value)}>{BoneIcon}</ToolButton>
+                  <ToolButton label="印刷体底图" active={underlay} onClick={toggleUnderlay}>{UnderIcon}</ToolButton>
+                  <ToolButton label="网格" active={showGrid} onClick={toggleGrid}>{GridToolIcon}</ToolButton>
+                  <ToolButton label="骨架" active={showSkeleton} onClick={toggleSkeleton}>{BoneIcon}</ToolButton>
                   <span className="sep" />
                   <label className={`write-content${referenceNeedsEntry ? " is-reference-required" : ""}`} htmlFor="reference-glyph">
                     <input
@@ -3750,6 +4018,7 @@ export default function EditorApp() {
                       onFocus={(event) => event.currentTarget.select()}
                       aria-label="当前字形 / 参考字"
                       aria-required={referenceNeedsEntry}
+                      placeholder={referenceNeedsEntry ? "输入首字" : undefined}
                       spellCheck={false}
                     />
                   </label>
@@ -3811,8 +4080,7 @@ export default function EditorApp() {
               {helpOpen && (
                 <div className="help-pop" id="editor-help" role="dialog" aria-label="快捷键与规矩">
                   <b>这是什么</b>
-                  拖动智能识别的锚点调整结构，预览线条会实时更新。
-                  画布下方的当前字形 / 参考字可以输入多个字，但画布参考字只显示第一个字；保存成功后输入框会只保留第一个字，并用它更新当前字形名称，同名则自动进入下一个变体。
+                  这是一个拙趣感手写字体生成器：把随手写下的笔画变成一段带有手写温度和自然变化的文字，实时预览并导出。
                   <b>画布编辑</b>
                   空白处 <ShortcutKey label="拖动" icon={<MouseIcon />} /> 框选，<ShortcutKey label="Shift" /> 点击增减选择，<ShortcutKey label="Shift" /> 框选追加。<ShortcutKey label="拖动" icon={<MouseIcon />} /> 选中笔画可一起移动，<ShortcutKey label="Esc" /> 清空，<span className="shortcut-sequence"><ShortcutModifier /><ShortcutKey label="A" /></span> 全选。
                   <b>快捷键</b>
@@ -3877,7 +4145,27 @@ export default function EditorApp() {
             </div>
           </div>
 
-          <div className="rowbar" data-open={rowOpen}>
+          <div
+            className={`rowbar${previewResizing ? " is-resizing" : ""}`}
+            ref={previewBarRef}
+            style={previewHeight === null ? undefined : { height: `${previewHeight}px` }}
+          >
+            <div
+              className="preview-resize-handle"
+              role="separator"
+              aria-label="调整预览高度"
+              aria-orientation="horizontal"
+              aria-valuemin={PREVIEW_MIN_HEIGHT}
+              aria-valuemax={previewHeightBounds()[1]}
+              aria-valuenow={previewHeight ?? undefined}
+              tabIndex={0}
+              onPointerDown={startPreviewResize}
+              onPointerMove={movePreviewResize}
+              onPointerUp={endPreviewResize}
+              onPointerCancel={endPreviewResize}
+              onLostPointerCapture={endPreviewResize}
+              onKeyDown={handlePreviewResizeKeyDown}
+            />
             <div className="rowbar-head">
               <b>预览</b>
               <span className="spacer" />
@@ -3896,7 +4184,7 @@ export default function EditorApp() {
                         <thead><tr><th scope="col">字形</th><th scope="col">大小</th><th scope="col">行内偏差</th><th scope="col">相邻差</th></tr></thead>
                         <tbody>{metricRows.map((cell, index) => (
                           <tr className={cell.thin ? "thin" : undefined} key={`${cell.name}-${index}`}>
-                            <th scope="row">{cell.name == null ? "·" : glyphLabel(cell.name)}</th>
+                            <th scope="row">{cell.name == null ? "·" : <GlyphLabel name={cell.name} className="metrics-glyph-label" />}</th>
                             <td>{cell.s.toFixed(3)}</td>
                             <td
                               className={`metrics-size-delta${cell.sizeAlert ? ` ${cell.sizeAlert}` : ""}`}
@@ -3921,27 +4209,20 @@ export default function EditorApp() {
                   </section>
                 )}
               </div>
-              <IconButton
-                label={rowOpen ? "折叠" : "展开"}
-                className="icon-button--square"
-                onClick={() => setRowOpen((value) => !value)}
-              >
-                <ChevronDownIcon className="pika-ui-icon" />
-              </IconButton>
             </div>
             {rowResult?.svg ? (
               <>
-                <div className="rowbar-art">
+                <div className="rowbar-art" ref={rowArtRef}>
                   <div
-                    className={`rowbar-svg${previewPlaying ? " is-playing" : ""}`}
+                    className={`rowbar-svg${rowResult.lineCount && rowResult.lineCount > 1 ? " is-multiline" : ""}${previewPlaying ? " is-playing" : ""}`}
                     dangerouslySetInnerHTML={{
-                      __html: rowPreviewSvg(rowResult.svg, viewHeight, rowResult.ratio, previewPlaying, rowInkStyles),
+                      __html: rowPreviewSvg(rowResult.svg, viewHeight, rowResult.ratio, rowResult.lineCount ?? 1, previewPlaying, rowInkStyles),
                     }}
                   />
                 </div>
 
               </>
-            ) : <div className="rowbar-art is-empty">{rowLine ? "正在排整段…" : "这个字库还没有字"}</div>}
+            ) : <div className="rowbar-art is-empty" ref={rowArtRef}>{rowLine ? "正在排整段…" : null}</div>}
           </div>
         </div>
 
@@ -4000,9 +4281,29 @@ export default function EditorApp() {
                 </button>
                 <button className="library-mode-card" type="button" onClick={() => handleDocumentNew("latin")}>
                   <span className="library-mode-card-icon library-mode-card-icon--latin" aria-hidden="true">Latin</span>
-                  <span className="library-mode-card-title">拉丁<small>（英文）</small></span>
+                  <span className="library-mode-card-title">拉丁</span>
+                </button>
+                <button
+                  className="library-mode-card library-mode-card--import"
+                  type="button"
+                  aria-label="导入 JSON 字库"
+                  onClick={handleDocumentImportClick}
+                >
+                  <span className="library-mode-card-icon library-mode-card-icon--import" aria-hidden="true">.json</span>
+                  <span className="library-mode-card-title">导入</span>
                 </button>
               </div>
+              <input
+                ref={libraryFileRef}
+                className="library-file-input"
+                type="file"
+                accept="application/json,.json"
+                aria-label="导入 JSON 字库"
+                onChange={(event) => {
+                  void handleDocumentOpen(event.target.files?.[0]);
+                  event.target.value = "";
+                }}
+              />
             </div>
           </Section>
 
@@ -4032,12 +4333,12 @@ export default function EditorApp() {
                 );
               })}
             </div>
-            <p className="trace-hint" data-live={drawMode ? "true" : "false"} role="status">
+            {!referenceNeedsEntry && (traceStatus || drawMode) && <p className="trace-hint" data-live={drawMode ? "true" : "false"} role="status">
               {traceStatus
                 || (drawMode
                   ? `${TRACE_MODES.find((mode) => mode.value === traceMode)?.hint ?? ""}再点一次结束描摹。`
-                  : "挑一种落笔方式，然后在字面上拖动写笔画。")}
-            </p>
+                  : "")}
+            </p>}
           </Section>
 
           <Section
@@ -4278,11 +4579,16 @@ export default function EditorApp() {
                         <Select.Content className="select-content export-select-content export-scope-content" position="popper" sideOffset={6}>
                           <Select.Viewport>
                             <Select.Item className="select-item" value="row">
-                              <Select.ItemText>整段导出</Select.ItemText>
+                              <Select.ItemText>导出整段</Select.ItemText>
                               <Select.ItemIndicator><CheckIcon className="pika-ui-icon" /></Select.ItemIndicator>
                             </Select.Item>
                             <Select.Item className="select-item" value="glyphs">
-                              <Select.ItemText>单字导出</Select.ItemText>
+                              <Select.ItemText>
+                                导出单字{" "}
+                                {selectedExportGlyph
+                                  ? <GlyphLabel name={selectedExportGlyph} className="export-glyph-label" />
+                                  : "未选择字形"}
+                              </Select.ItemText>
                               <Select.ItemIndicator><CheckIcon className="pika-ui-icon" /></Select.ItemIndicator>
                             </Select.Item>
                           </Select.Viewport>
@@ -4339,36 +4645,29 @@ export default function EditorApp() {
                     className="export-action"
                     type="button"
                     onClick={() => void exportContent()}
-                    disabled={exportBusy || (exportScope === "row" ? !rowResult?.svg : !names.length)}
+                    disabled={exportBusy || (exportScope === "row" ? !rowResult?.svg : !selectedExportGlyph || !group.items[selectedExportGlyph]?.length)}
                   >
                     <DownloadIcon className="pika-ui-icon" />
                     <span>{exportBusy ? "导出中…" : "导出"}</span>
                   </button>
                   {exportMessage && <p className="export-message" role="status">{exportMessage}</p>}
-
-                  {/* 导出的是图，这两个进出的是**几何 JSON** —— 骨架、手感、种子都在里面。
-                      浏览器那个槽位只防手滑，真正带走这一版靠下载。 */}
-                  <div className="export-file-row">
-                    <button className="library-file-action" type="button" onClick={() => downloadDocument()}>
-                      下载工程文件
-                    </button>
-                    <button className="library-file-action" type="button" onClick={() => libraryFileRef.current?.click()}>
-                      打开工程文件
-                    </button>
-                  </div>
-                  <input
-                    ref={libraryFileRef}
-                    className="library-file-input"
-                    type="file"
-                    accept="application/json,.json"
-                    onChange={(event) => {
-                      void handleDocumentOpen(event.target.files?.[0]);
-                      event.target.value = "";
-                    }}
-                  />
                 </div>
               </div>
             </Section>
+
+            <div className="section data-section">
+              <div className="section-trigger data-section-title" role="heading" aria-level={3}>
+                <span className="section-title">数据</span>
+              </div>
+              <div className="section-body data-section-body">
+                <div className="export-file-row">
+                  <button className="library-file-action library-file-action--download" type="button" onClick={() => downloadDocument(projectFilename)}>
+                    <ProjectFileIcon className="pika-ui-icon" aria-hidden="true" />
+                    <span>下载工程文件</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
 
         </aside>

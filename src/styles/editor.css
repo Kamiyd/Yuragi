@@ -140,7 +140,6 @@ button { color: inherit; }
   pointer-events: none;
 }
 .canvas-wrap.is-reference-locked .canvas-artwork { pointer-events: none; }
-
 .canvas-under {
   position: absolute;
   inset: 0;
@@ -244,6 +243,8 @@ button { color: inherit; }
   animation: reference-field-pulse 1.5s ease-out 2;
 }
 .write-content.is-reference-required input::placeholder { color: var(--ink); }
+.write-content.is-reference-required { width: 74px; padding-inline: 8px; }
+.write-content.is-reference-required input { width: 58px; min-width: 58px; }
 .tools .sep { width: 1px; height: 24px; margin: 0 4px; background: var(--line); }
 .tools button.tool-toggle {
   display: grid;
@@ -370,12 +371,21 @@ button { color: inherit; }
 .shortcut-list {
   overflow: hidden;
   margin-top: 2px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-control);
+  border: 0;
+  border-radius: 0;
   background: var(--panel);
 }
-.shortcut-list .row { padding: 5px 9px; }
-.shortcut-list .row + .row { margin-top: 0; border-top: 1px solid var(--line); }
+.shortcut-list .row { padding: 5px 0; }
+.shortcut-list .row + .row { position: relative; margin-top: 0; border-top: 0; }
+.shortcut-list .row + .row::before {
+  position: absolute;
+  top: 0;
+  right: 9px;
+  left: 0;
+  border-top: 1px solid #f1f0ed;
+  content: "";
+  pointer-events: none;
+}
 .shortcut-keys { display: inline-flex; align-items: center; justify-content: flex-end; flex: none; gap: 3px; }
 .shortcut-keys--stacked { flex-direction: column; align-items: flex-end; gap: 2px; }
 .shortcut-sequence { display: inline-flex; align-items: center; gap: 2px; }
@@ -403,25 +413,59 @@ button { color: inherit; }
 .shortcut-key-icon svg path { stroke: currentColor; }
 
 .rowbar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   flex: none;
   margin: 0 var(--outer-gutter) var(--outer-gutter);
-  padding: 9px 12px 11px 18px;
+  padding: 2px 12px 9px 18px;
+  min-height: 88px;
+  max-height: min(248px, calc(100vh - 160px));
   border-radius: var(--r-panel);
+  border: 1px solid var(--line);
   background: var(--panel);
-  box-shadow: var(--shadow-float);
-  transition: padding .2s cubic-bezier(.32, .72, 0, 1);
+  box-shadow: 0 1px 3px rgb(28 28 24 / 10%);
+  overflow: visible;
 }
-.rowbar[data-open="false"] { padding-bottom: 9px; }
-.rowbar-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.preview-resize-handle {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  right: 18px;
+  left: 18px;
+  height: 10px;
+  border: 0;
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+}
+.preview-resize-handle::before {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  width: 42px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  content: "";
+  opacity: 0;
+  transform: translateX(-50%);
+  transition: opacity .16s ease;
+}
+.rowbar:hover .preview-resize-handle::before,
+.preview-resize-handle:focus-visible::before,
+.rowbar.is-resizing .preview-resize-handle::before { opacity: 1; }
+.rowbar.is-resizing, .rowbar.is-resizing * { user-select: none; }
+.rowbar-head { display: flex; align-items: center; gap: 10px; margin-bottom: 0; }
 .rowbar-head b { flex: none; white-space: nowrap; color: var(--faint); font-size: 11px; font-weight: 600; letter-spacing: .04em; }
 .rowbar-head .spacer { flex: 1; }
-.rowbar-head button svg { transition: transform .18s ease; }
-.rowbar[data-open="false"] .rowbar-head button svg { transform: rotate(-90deg); }
-.rowbar[data-open="false"] .rowbar-head { margin-bottom: 0; }
-.rowbar[data-open="false"] .rowbar-art { display: none; }
-.rowbar-art { display: flex; align-items: center; min-height: 48px; overflow: hidden; color: var(--ink); }
-.rowbar-svg { flex: none; max-width: 100%; color: var(--ink); }
-.rowbar-svg svg { display: block; max-width: 100%; height: auto; }
+.rowbar-art { display: block; flex: 1; min-height: 44px; overflow-x: hidden; overflow-y: auto; color: var(--ink); scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; overscroll-behavior: contain; }
+/* SVG 已由 core 按每一行的字号给出实际尺寸；这里不能再用 height:100% 把多行
+   整体压回预览框，否则字越多反而越小。超出高度时让预览区滚动。 */
+.rowbar-svg { width: max-content; height: auto; margin: 0 auto; color: var(--ink); }
+.rowbar-svg svg { display: block; width: auto; height: auto; max-width: none; }
+.rowbar-svg.is-multiline { width: 100%; }
+.rowbar-svg.is-multiline svg { width: 100%; }
 
 /* 逐字数据独立浮在预览上方，列表滚动不挤占画布。 */
 .metrics-anchor { position: relative; flex: none; }
@@ -431,7 +475,7 @@ button { color: inherit; }
 .metrics-toggle:active { transform: scale(.93); }
 .metrics-toggle:disabled { opacity: .4; cursor: default; }
 .metrics-toggle:disabled:hover { background: transparent; color: var(--muted); }
-.metrics-panel { position: absolute; z-index: 25; right: 0; bottom: calc(100% + 22px); width: 326px; padding: 12px; border-radius: var(--r-panel); background: var(--panel); box-shadow: var(--shadow-pop); }
+.metrics-panel { position: absolute; z-index: 25; right: 0; bottom: calc(100% + 22px); width: 292px; max-width: calc(100vw - 32px); padding: 12px; border-radius: var(--r-panel); background: var(--panel); box-shadow: var(--shadow-pop); }
 .metrics-panel-head { display: flex; align-items: center; gap: 8px; padding: 0 0 8px 8px; }
 .metrics-panel-head strong { font-size: 12px; font-weight: 600; }
 .metrics-panel-head > span { color: var(--muted); font: 10px var(--font); }
@@ -489,7 +533,7 @@ button { color: inherit; }
   border: 1px solid var(--line);
   border-radius: var(--r-floating-control);
   background: var(--panel);
-  box-shadow: var(--shadow-float);
+  box-shadow: 0 1px 3px rgb(28 28 24 / 10%);
 }
 .preview-control-wrap .icon-button--square {
   width: var(--preview-control-size);
@@ -508,9 +552,10 @@ button { color: inherit; }
   align-items: center;
   gap: 2px;
   padding: 5px;
+  border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--panel);
-  box-shadow: var(--shadow-float);
+  box-shadow: 0 1px 3px rgb(28 28 24 / 10%);
 }
 .pill--tight { gap: 0; }
 .zoom-readout {
@@ -579,8 +624,9 @@ button { color: inherit; }
   flex-direction: column;
   min-height: 0;
   border-radius: var(--r-panel);
+  border: 1px solid var(--line);
   background: var(--panel);
-  box-shadow: var(--shadow-float);
+  box-shadow: 0 1px 3px rgb(28 28 24 / 10%);
   transition: transform .34s cubic-bezier(.32, .72, 0, 1), opacity .22s ease;
 }
 .panel--left { left: var(--outer-gutter); width: 264px; }
@@ -608,7 +654,7 @@ button { color: inherit; }
   font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
-  box-shadow: var(--shadow-float);
+  box-shadow: 0 1px 3px rgb(28 28 24 / 10%);
   transition: transform .16s ease, opacity .22s ease;
 }
 .panel-stub-inner {
@@ -814,7 +860,11 @@ button { color: inherit; }
 .glyph-thumbnail .filled { fill: currentColor; stroke: none; }
 .glyph-copy { display: flex; align-items: center; justify-content: space-between; min-width: 0; flex: 1; gap: 8px; }
 .glyph-name { overflow: hidden; font-size: 12.5px; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
-.glyph-name small { margin-left: 5px; color: var(--faint); font: 10px/1 var(--font); }
+.glyph-name small,
+.glyph-label small { margin-left: 5px; color: var(--faint); font: 10px/1 var(--font); }
+.glyph-label { display: inline-flex; min-width: 0; align-items: baseline; }
+.metrics-glyph-label,
+.export-glyph-label { font: inherit; }
 .row-menu {
   display: grid;
   place-items: center;
@@ -946,6 +996,7 @@ button { color: inherit; }
   text-align: left;
   cursor: pointer;
 }
+.data-section-title { cursor: default; }
 .panel--left .section-trigger { padding-left: calc(var(--left-panel-content-gutter) + var(--left-control-content-inset)); }
 .section-trigger--action {
   display: flex;
@@ -1005,7 +1056,7 @@ button { color: inherit; }
 
 /* ── 导出：轻量的配置行 + 描边主操作 ─────────────────────────────────────── */
 
-.export-section-content { padding-bottom: 10px; }
+.export-section-content { padding-bottom: 0; }
 .export-stack { display: grid; gap: 6px; }
 .export-control-row {
   display: grid;
@@ -1277,8 +1328,6 @@ button { color: inherit; }
 @media (max-width: 1200px) {
   .viewport { padding: 84px 24px 32px; }
 }
-
-.app[data-row-open="false"] { --save-toast-row-offset: 72px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
@@ -1622,6 +1671,30 @@ button { color: inherit; }
 }
 .library-file-action:hover { background: var(--soft-strong); color: var(--ink); }
 .library-file-action--danger:hover { color: var(--danger, #B4552B); }
+.library-file-action--download {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  height: 35px;
+  padding: 0 6px 0 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgb(28 28 24 / 8%);
+  font-size: 12.5px;
+  letter-spacing: -.01em;
+  text-align: left;
+  transition: background .16s ease, color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+.library-file-action--download > svg { flex: none; width: 16px; height: 16px; color: var(--muted); }
+.library-file-action--download > span { min-width: 0; }
+.library-file-action--download:hover {
+  background: #fcfcfb;
+  color: var(--ink);
+  box-shadow: 0 2px 5px rgb(28 28 24 / 12%);
+}
+.library-file-action--download:active { transform: translateY(1px); }
 .library-file-input { display: none; }
 .select-label {
   padding: 7px 10px 4px;
@@ -1631,5 +1704,5 @@ button { color: inherit; }
   letter-spacing: .04em;
 }
 
-/* 导出分组底下那两个进出工程文件的按钮 */
-.export-file-row { display: flex; gap: 6px; margin-top: 8px; }
+/* 导出 / 数据分组里的文件操作按钮 */
+.export-file-row { display: flex; gap: 6px; margin-top: 0; }

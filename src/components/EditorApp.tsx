@@ -506,13 +506,17 @@ function glyphLabel(name: string) {
   return info.variant > 1 ? `${info.base} #${info.variant}` : info.base;
 }
 
-function orderedProjectFilename(names: string[]) {
+function orderedProjectStem(names: string[]) {
   const stem = names
     .filter((name) => !isDraftGlyph(name))
     .map(glyphLabel)
     .filter(Boolean)
     .join("");
-  return `${exportSafeName(stem || "手写字")}.json`;
+  return exportSafeName(stem || "手写字");
+}
+
+function orderedProjectFilename(names: string[]) {
+  return `${orderedProjectStem(names)}.json`;
 }
 
 function GlyphLabel({ name, className = "glyph-label" }: { name: string; className?: string }) {
@@ -942,10 +946,10 @@ function rowPreviewSvg(svg: string, height: number, ratio: number, lineCount: nu
 /* ── 展示：全白画面上按笔顺把这段话写一遍，并把这一遍导出成视频 / GIF ─────
    排程、画帧、编码都在 src/lib/showcase.ts —— 屏幕上动的是 SVG 的 dashoffset，
    导出走 canvas，两边读同一份排程，所以导出的就是你刚看的那一遍。 */
-function ShowcaseStage({ svg, ratio, name, onClose }: {
+function ShowcaseStage({ svg, ratio, filenameBase, onClose }: {
   svg: string;
   ratio: number;
-  name: string;
+  filenameBase: string;
   onClose: () => void;
 }) {
   const hostRef = React.useRef<HTMLDivElement>(null);
@@ -1055,7 +1059,7 @@ function ShowcaseStage({ svg, ratio, name, onClose }: {
       const { width, height, scale } = showcaseCanvasSize(plan, kind === "video" ? 1440 : 960);
       canvas.width = width;
       canvas.height = height;
-      const base = `${exportSafeName(name.slice(0, 12) || "手写")}-展示`;
+      const base = `${exportSafeName(filenameBase || "手写")}-showcase`;
       if (kind === "video") {
         const blob = await exportShowcaseVideo(plan, canvas, scale, { onProgress: setProgress, onPhase: setPhase });
         downloadBlob(blob, `${base}.mp4`);
@@ -1285,8 +1289,8 @@ const TraceRawIcon = (
   </svg>
 );
 const TRACE_MODES = [
-  { value: "smart", label: "智能识别", icon: TraceSmartIcon, hint: "对着汉字笔画识别，照现有字库的写法落笔。" },
-  { value: "original", label: "保留手迹", icon: TraceRawIcon, hint: "保留走向和回环，适合英文、连笔与手绘。" },
+  { value: "smart", label: "智能识别", shortcut: "S", icon: TraceSmartIcon, hint: "对着汉字笔画识别，照现有字库的写法落笔。" },
+  { value: "original", label: "保留手迹", shortcut: "D", icon: TraceRawIcon, hint: "保留走向和回环，适合英文、连笔与手绘。" },
 ] as const;
 const BoneIcon = (
   <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
@@ -1904,6 +1908,7 @@ export default function EditorApp() {
   const marqueeRef = React.useRef<{ start: Point; base: number[]; pointerId: number; client: Point; active: boolean } | null>(null);
   const [selectedPoint, setSelectedPoint] = React.useState<PointTarget | null>(null);
   const [drawMode, setDrawModeState] = React.useState(false);
+  // 每次载入一份字库时由它的版式给出起手画笔；载入完成后按钮仍可自由切换。
   const [traceMode, setTraceMode] = React.useState<"smart" | "original">("smart");
   const [draftStartPending, setDraftStartPending] = React.useState(false);
   const [tracePoints, setTracePoints] = React.useState<Point[]>([]);
@@ -2016,6 +2021,7 @@ export default function EditorApp() {
   ), [rowResult, inkStyleFor]);
   const visibleNames = dragOrder || names;
   const glyphOrderKey = visibleNames.join("\u0000");
+  const projectStem = orderedProjectStem(visibleNames);
   const projectFilename = orderedProjectFilename(visibleNames);
 
   /* 用 FLIP 让被挤开的行走一小段柔和的位移，而不是 React 重新排键后
@@ -2106,8 +2112,6 @@ export default function EditorApp() {
 
   React.useEffect(() => {
     try {
-      const savedTraceMode = window.localStorage.getItem("hg-trace-mode");
-      if (savedTraceMode === "smart" || savedTraceMode === "original") setTraceMode(savedTraceMode);
       const stored = JSON.parse(window.localStorage.getItem(PANEL_STORAGE_KEY) || "null");
       if (stored && typeof stored === "object") {
         if (typeof stored.left === "boolean") setLeftOpen(stored.left);
@@ -2235,6 +2239,8 @@ export default function EditorApp() {
         setHasUnsavedChanges(false);
         setGlyphName(initialGlyphName);
         setDraftStartPending(!firstGlyph || isDraftGlyph(firstGlyph));
+        // 推荐只在一份字库载入时设一次；后续用户可以在“描摹”面板中自由切换。
+        setTraceMode(libraryIsLatin(initialPayload.glyphs) ? "original" : "smart");
         setLiveAdvances({});
         setReferenceText(firstGlyph ? glyphInfo(firstGlyph).base : "");
         setRowTrack(Number.isFinite(Number(payload.glyphs?.track))
@@ -2654,7 +2660,6 @@ export default function EditorApp() {
     if (drawMode && traceMode === mode) { setDrawMode(false); return; }
     clearTrace();
     setTraceMode(mode);
-    try { window.localStorage.setItem("hg-trace-mode", mode); } catch { /* Keep session preference. */ }
     setDrawMode(true);
   };
 
@@ -3328,6 +3333,13 @@ export default function EditorApp() {
       }
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (typing) return;
+      const traceShortcut = TRACE_MODES.find((mode) => mode.shortcut.toLowerCase() === key);
+      if (traceShortcut) {
+        if (event.repeat) return;
+        event.preventDefault();
+        pickTraceMode(traceShortcut.value);
+        return;
+      }
       if (event.key === "Escape" && drawMode) { event.preventDefault(); setDrawMode(false); return; }
       if (event.key === "Escape") { clearMarquee(); setSelectedStrokes([]); setSelectedPoint(null); return; }
       if (drawMode) return;
@@ -3352,7 +3364,7 @@ export default function EditorApp() {
     return () => {
       window.removeEventListener("keydown", handleShortcut);
     };
-  }, [geo, drawMode, glyphName, restore, selectedStrokes, selectedPoint, showSaveToast]);
+  }, [geo, drawMode, traceMode, referenceNeedsEntry, glyphName, restore, selectedStrokes, selectedPoint, showSaveToast]);
 
   const exportContent = async () => {
     const exportNames = names.filter((name) => !isDraftGlyph(name));
@@ -3367,7 +3379,7 @@ export default function EditorApp() {
     setExportMessage(exportScope === "glyphs" ? `准备导出 ${selectedExportGlyphLabel}…` : "准备整段预览…");
 
     try {
-      const base = exportSafeName((geo.file.split("/").pop() || "glyphs").replace(/\.[^.]+$/, ""));
+      const base = projectStem;
       const suffix = format === "svg" ? "SVG" : `${scale}x-PNG`;
 
       if (exportScope === "glyphs") {
@@ -3377,7 +3389,7 @@ export default function EditorApp() {
         const style = inkStyleFor(name);
         const data = await renderExportGlyph(group, name, names.indexOf(name), format, scale, style.color, style.opacity);
         const stem = exportSafeName(info.variant > 1 ? `${info.base}-v${info.variant}` : info.base);
-        const filename = `${stem}.${format}`;
+        const filename = `${base}-${stem}.${format}`;
         const contentType = format === "svg" ? "image/svg+xml;charset=utf-8" : "image/png";
         downloadBlob(new Blob([data], { type: contentType }), filename);
         setExportMessage("");
@@ -4139,6 +4151,14 @@ export default function EditorApp() {
                     <span>拖动时不吸格</span>
                     <span className="shortcut-keys"><ShortcutKey label="Alt" /></span>
                     </div>
+                    <div className="row">
+                    <span>切换描摹方式</span>
+                    <span className="shortcut-keys">
+                      <ShortcutKey label="S" />
+                      <span className="shortcut-sequence-divider" aria-hidden="true">/</span>
+                      <ShortcutKey label="D" />
+                    </span>
+                    </div>
                   </div>
                 </div>
               )}
@@ -4323,6 +4343,7 @@ export default function EditorApp() {
                     type="button"
                     disabled={referenceNeedsEntry}
                     aria-pressed={active}
+                    aria-keyshortcuts={mode.shortcut}
                     onClick={() => pickTraceMode(mode.value)}
                   >
                     <span className="drawing-action-icon">{mode.icon}</span>
@@ -4782,7 +4803,7 @@ export default function EditorApp() {
             <Dialog.Content className="showcase-content">
               <Dialog.Title className="showcase-title">展示</Dialog.Title>
               {showcase && (
-                <ShowcaseStage svg={showcase.svg} ratio={showcase.ratio} name={rowLine} onClose={() => setShowcase(null)} />
+                <ShowcaseStage svg={showcase.svg} ratio={showcase.ratio} filenameBase={projectStem} onClose={() => setShowcase(null)} />
               )}
             </Dialog.Content>
           </Dialog.Portal>

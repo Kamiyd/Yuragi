@@ -29,6 +29,7 @@ import {
   importDocument,
   requestJSON,
 } from "../lib/api";
+import { orderedGlyphNames } from "../lib/core/library";
 import { BASE_STYLE, learnStrokeStyle, recognizeStroke, type StrokeStyle } from "../lib/strokes";
 import {
   SHOWCASE_SPEEDS,
@@ -71,6 +72,7 @@ type RowMode = "library" | "custom";
 type EditorConfig = {
   rowMode?: RowMode;
   rowText?: string;
+  glyphOrder?: string[];
   /** 文档级画布视图开关；不随当前单字切换。 */
   underlay?: boolean;
   showGrid?: boolean;
@@ -368,6 +370,18 @@ function readEditorConfig(value: unknown): EditorConfig {
   const next: EditorConfig = {};
   if (record.rowMode === "library" || record.rowMode === "custom") next.rowMode = record.rowMode;
   if (record.rowText !== undefined) next.rowText = String(record.rowText || "").replace(/[\/\n]/g, "");
+  if (Array.isArray(record.glyphOrder)) {
+    const order: string[] = [];
+    const seen = new Set<string>();
+    for (const value of record.glyphOrder) {
+      const name = String(value);
+      if (!seen.has(name)) {
+        seen.add(name);
+        order.push(name);
+      }
+    }
+    if (order.length) next.glyphOrder = order;
+  }
   if (typeof record.underlay === "boolean") next.underlay = record.underlay;
   if (typeof record.showGrid === "boolean") next.showGrid = record.showGrid;
   if (typeof record.showSkeleton === "boolean") next.showSkeleton = record.showSkeleton;
@@ -589,6 +603,8 @@ function renameGlyphInLibrary(library: GlyphLibrary, from: string, reference: st
   if (!base || !from || !Object.hasOwn(library.items, from) || glyphInfo(from).base === base) return null;
 
   const name = nextGlyphVariantName(library.items, base);
+  const glyphOrder = orderedGlyphNames(library.items, library.editor?.glyphOrder)
+    .map((entry) => entry === from ? name : entry);
   const items: Record<string, EditableElement[]> = {};
   for (const [entry, value] of Object.entries(library.items)) {
     items[entry === from ? name : entry] = value;
@@ -600,7 +616,12 @@ function renameGlyphInLibrary(library: GlyphLibrary, from: string, reference: st
     delete glyphSeeds[from];
   }
 
-  const next: GlyphLibrary = { ...library, items, glyphSeeds };
+  const next: GlyphLibrary = {
+    ...library,
+    items,
+    glyphSeeds,
+    editor: { ...(library.editor || {}), glyphOrder },
+  };
   const seedMemory = { ...(library.glyphSeedMemory || {}) };
   if (Object.hasOwn(seedMemory, from)) {
     seedMemory[name] = seedMemory[from];
@@ -1192,6 +1213,20 @@ function enqueueThumb(body: string, onDone: (paths: RenderPath[]) => void) {
 function formatNumber(value: number, digits = 2) {
   return Number.isInteger(value) ? String(value) : value.toFixed(digits).replace(/0+$/, "").replace(/\.$/, "");
 }
+
+/** 品牌标记：甲骨文的「永」。右侧一条长 S 的主流（水道）、左上斜支流、左下折回的分支。
+    《说文》「永，长也，象水巠理之长」—— 本义是水流长，后来才引申成永远。
+    骨架照《甲骨文編》450.4 收的第 1 式描的；那一条收了 18 个写法，各不相同 ——
+    三千年前这个字就没有一个固定的样子，跟本项目「每次写都是新写的一遍」是同一件事。
+    几何在 brand/yuragi-mark.json，这几条 d 是流水线跑出来的，别手改。 */
+const YuragiMark = (
+  <svg className="brand-mark" viewBox="0 0 64 64" fill="none" stroke="currentColor"
+    strokeWidth="6.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M48.03 6.17C47.99 6.29 47.97 6.34 47.77 6.92C47.57 7.51 47.11 8.76 46.84 9.68C46.57 10.6 46.34 11.53 46.15 12.45C45.95 13.37 45.81 14.3 45.67 15.22C45.53 16.14 45.41 17.05 45.31 17.96C45.21 18.87 45.1 19.77 45.04 20.68C44.99 21.58 44.95 22.48 44.99 23.38C45.03 24.27 45.13 25.16 45.29 26.04C45.44 26.91 45.69 27.78 45.92 28.63C46.15 29.48 46.43 30.31 46.65 31.16C46.87 32 47.07 32.83 47.23 33.69C47.39 34.55 47.48 35.42 47.6 36.31C47.73 37.2 47.92 38.22 47.98 39.01C48.04 39.79 47.94 40.38 47.95 41.01C47.97 41.65 48 42.23 48.05 42.81C48.09 43.39 48.18 43.95 48.22 44.5C48.26 45.05 48.3 45.59 48.29 46.12C48.27 46.65 48.21 47.18 48.14 47.69C48.06 48.2 47.93 48.69 47.82 49.19C47.72 49.68 47.6 50.17 47.49 50.66C47.39 51.15 47.3 51.64 47.19 52.13C47.09 52.62 46.99 53.1 46.88 53.59C46.76 54.07 46.62 54.55 46.49 55.03C46.36 55.51 46.2 55.99 46.1 56.48C46 56.97 45.97 57.51 45.91 57.98C45.85 58.45 45.77 59.08 45.74 59.3" />
+    <path d="M35.43 5.31C35.34 5.41 35.28 5.47 34.88 5.89C34.48 6.31 33.64 7.16 33.04 7.83C32.43 8.49 31.88 9.2 31.27 9.86C30.66 10.52 29.97 11.13 29.36 11.79C28.74 12.46 28.08 13.1 27.56 13.86C27.03 14.63 26.74 15.62 26.21 16.39C25.68 17.16 25.07 17.87 24.36 18.47C23.65 19.08 22.7 19.45 21.96 20.03C21.21 20.6 20.56 21.27 19.88 21.92C19.21 22.57 18.57 23.26 17.89 23.91C17.22 24.56 16.5 25.18 15.83 25.83C15.15 26.49 14.54 27.21 13.85 27.85C13.16 28.49 12.22 29.24 11.69 29.69C11.16 30.14 10.85 30.41 10.68 30.56" />
+    <path d="M4.38 55.51C4.48 55.42 4.69 55.22 4.96 54.96C5.23 54.7 5.64 54.29 5.99 53.96C6.35 53.62 6.73 53.3 7.11 52.96C7.48 52.62 7.87 52.27 8.24 51.92C8.62 51.56 8.99 51.18 9.36 50.8C9.73 50.42 10.09 50.02 10.47 49.65C10.86 49.27 11.25 48.89 11.66 48.53C12.07 48.16 12.51 47.82 12.93 47.47C13.36 47.11 13.8 46.76 14.19 46.37C14.59 45.98 14.96 45.58 15.29 45.13C15.61 44.68 15.89 44.18 16.15 43.69C16.41 43.19 16.54 42.61 16.85 42.14C17.17 41.67 17.83 41.08 18.03 40.87C18.16 41.13 18.7 41.9 18.85 42.41C18.99 42.92 18.89 43.43 18.89 43.94C18.89 44.45 18.85 44.96 18.84 45.46C18.84 45.96 18.84 46.46 18.86 46.95C18.87 47.44 18.92 47.93 18.94 48.42C18.97 48.91 19.01 49.39 19.02 49.87C19.03 50.35 19.02 50.83 19.01 51.3C19 51.77 18.97 52.24 18.96 52.7C18.94 53.17 18.93 53.63 18.93 54.08C18.93 54.53 18.95 54.98 18.95 55.42C18.95 55.86 18.95 56.3 18.92 56.73C18.88 57.16 18.8 57.57 18.74 58C18.68 58.43 18.59 59.1 18.56 59.32" />
+  </svg>
+);
 
 function PanelGlyph({ side }: { side: "left" | "right" }) {
   return (
@@ -1999,7 +2034,7 @@ export default function EditorApp() {
   const group = glyphs;
   const geoRef = React.useRef<GeoPayload | null>(geo);
   geoRef.current = geo;
-  const names = glyphs ? Object.keys(glyphs.items) : [];
+  const names = glyphs ? orderedGlyphNames(glyphs.items, glyphs.editor?.glyphOrder) : [];
   const hasDraftGlyph = names.some((name) => isDraftGlyph(name));
   const referenceNeedsEntry = hasDraftGlyph && !firstReferenceCharacter(referenceText);
   const glyphIndex = Math.max(0, names.indexOf(glyphName));
@@ -2217,7 +2252,10 @@ export default function EditorApp() {
   React.useEffect(() => {
     requestJSON<GeoPayload>("/api/geo")
       .then((payload) => {
-        const firstGlyph = Object.keys(payload.glyphs?.items || {})[0] || "";
+        const firstGlyph = orderedGlyphNames(
+          payload.glyphs?.items || {},
+          payload.glyphs?.editor?.glyphOrder,
+        )[0] || "";
         // 空字库也要有一个可交互的目标：先放入 UI 草稿，让新建后马上进入
         // “输入首字 → 选择落笔方式 → 开始描摹”的流程，而不是落笔到空 key 上。
         const initialGlyphName = firstGlyph || nextDraftGlyphName(payload.glyphs.items);
@@ -2459,6 +2497,7 @@ export default function EditorApp() {
       items: rowPreviewItems,
       glyphSeeds: glyphs.glyphSeeds,
     },
+    glyphOrder: names,
     text: rowLine,
     seed: viewSeed,
     track: rowTrack,
@@ -3022,7 +3061,8 @@ export default function EditorApp() {
     let renamedGlyph: string | null = null;
     const targetGlyphs = target.glyphs;
     const draftName = targetGlyphs
-      ? Object.keys(targetGlyphs.items).find((name) => isDraftGlyph(name)) || null
+      ? orderedGlyphNames(targetGlyphs.items, targetGlyphs.editor?.glyphOrder)
+        .find((name) => isDraftGlyph(name)) || null
       : null;
 
     if (draftName) {
@@ -3044,24 +3084,44 @@ export default function EditorApp() {
         while (Object.hasOwn(targetGlyphs.items, `${base}${variant}`)) variant += 1;
         nextName = `${base}${variant}`;
       }
+      // 单独添加已有字时，默认沿用基础字形，避免新手先得到一个空白变体。
+      // 如果用户已经在草稿上画过内容，则尊重这份手动画法，不用基础字覆盖它。
+      const draftItems = targetGlyphs.items[draftName] || [];
+      const reuseBase = !draftItems.length && Object.hasOwn(targetGlyphs.items, base);
+      const glyphOrder = orderedGlyphNames(targetGlyphs.items, targetGlyphs.editor?.glyphOrder)
+        .map((entry) => entry === draftName ? nextName : entry);
       const nextItems: Record<string, EditableElement[]> = {};
       for (const [name, items] of Object.entries(targetGlyphs.items)) {
-        nextItems[name === draftName ? nextName : name] = items;
+        nextItems[name === draftName ? nextName : name] = name === draftName && reuseBase
+          ? clone(targetGlyphs.items[base])
+          : items;
       }
       const nextSeeds = { ...targetGlyphs.glyphSeeds };
       const nextSeedMemory = { ...(targetGlyphs.glyphSeedMemory || {}) };
       if (Object.hasOwn(nextSeeds, draftName)) {
         nextSeeds[nextName] = nextSeeds[draftName];
         delete nextSeeds[draftName];
+      } else if (reuseBase && Object.hasOwn(nextSeeds, base)) {
+        nextSeeds[nextName] = nextSeeds[base];
       }
       if (Object.hasOwn(nextSeedMemory, draftName)) {
         nextSeedMemory[nextName] = nextSeedMemory[draftName];
         delete nextSeedMemory[draftName];
+      } else if (reuseBase && Object.hasOwn(nextSeedMemory, base)) {
+        nextSeedMemory[nextName] = nextSeedMemory[base];
       }
-      const nextEditor = targetGlyphs.editor ? { ...targetGlyphs.editor } : undefined;
-      if (nextEditor?.ink && Object.hasOwn(nextEditor.ink, draftName)) {
-        const ink = { ...nextEditor.ink, [nextName]: clone(nextEditor.ink[draftName]) };
-        delete ink[draftName];
+      const nextEditor: EditorConfig = {
+        ...(targetGlyphs.editor || {}),
+        glyphOrder,
+      };
+      if (nextEditor?.ink) {
+        const ink = { ...nextEditor.ink };
+        if (Object.hasOwn(ink, draftName)) {
+          ink[nextName] = clone(ink[draftName]);
+          delete ink[draftName];
+        } else if (reuseBase && Object.hasOwn(ink, base)) {
+          ink[nextName] = clone(ink[base]);
+        }
         nextEditor.ink = ink;
       }
       const nextGlyphs: GlyphLibrary = {
@@ -3069,8 +3129,8 @@ export default function EditorApp() {
         items: nextItems,
         glyphSeeds: nextSeeds,
         glyphSeedMemory: nextSeedMemory,
+        editor: nextEditor,
       };
-      if (nextEditor) nextGlyphs.editor = nextEditor;
       saveTarget = {
         ...target,
         glyphs: nextGlyphs,
@@ -3303,7 +3363,10 @@ export default function EditorApp() {
           setSelectedPoint(null);
           setHasUnsavedChanges(JSON.stringify(restored.glyphs) !== JSON.stringify(savedGlyphsRef.current));
           if (!Object.hasOwn(restored.glyphs?.items || {}, glyphName)) {
-            const nextGlyph = Object.keys(restored.glyphs?.items || {})[0] || "";
+            const nextGlyph = orderedGlyphNames(
+              restored.glyphs?.items || {},
+              restored.glyphs?.editor?.glyphOrder,
+            )[0] || "";
             setGlyphName(nextGlyph);
             setReferenceText(glyphInfo(nextGlyph).base);
           }
@@ -3499,6 +3562,7 @@ export default function EditorApp() {
     }
 
     const nextItems: Record<string, EditableElement[]> = { ...glyphs.items };
+    const glyphOrder = [...names, ...batchAddPlan.map((entry) => entry.name)];
     const nextSeeds = { ...(glyphs.glyphSeeds || {}) };
     const nextSeedMemory = { ...(glyphs.glyphSeedMemory || {}) };
     const nextInk = { ...(glyphs.editor?.ink || {}) };
@@ -3515,9 +3579,10 @@ export default function EditorApp() {
       ...glyphs,
       items: nextItems,
       glyphSeeds: nextSeeds,
+      editor: { ...(glyphs.editor || {}), glyphOrder },
     };
     if (Object.keys(nextInk).length || glyphs.editor?.ink !== undefined) {
-      nextGlyphs.editor = { ...(glyphs.editor || {}), ink: nextInk };
+      nextGlyphs.editor = { ...(nextGlyphs.editor || {}), ink: nextInk };
     }
     if (Object.keys(nextSeedMemory).length || glyphs.glyphSeedMemory !== undefined) {
       nextGlyphs.glyphSeedMemory = nextSeedMemory;
@@ -3546,7 +3611,10 @@ export default function EditorApp() {
     // 先创建内部草稿名的空白字形；参考字只在用户保存时写入正式标题。
     const source: EditableElement[] = [];
     if (drawMode) setDrawMode(false);
-    updateGlyphs({ items: { ...glyphs.items, [nextName]: source } });
+    updateGlyphs({
+      items: { ...glyphs.items, [nextName]: source },
+      editor: { ...(glyphs.editor || {}), glyphOrder: [...names, nextName] },
+    });
     setGlyphName(nextName);
     setReferenceText("");
     setDraftStartPending(true);
@@ -3562,6 +3630,9 @@ export default function EditorApp() {
       return;
     }
     const nextName = nextGlyphVariantName(glyphs.items, name);
+    const nextOrder = [...names];
+    const sourceIndex = nextOrder.indexOf(name);
+    nextOrder.splice(sourceIndex + 1, 0, nextName);
     const nextItems: Record<string, EditableElement[]> = {};
     for (const [entry, items] of Object.entries(glyphs.items)) {
       nextItems[entry] = items;
@@ -3577,7 +3648,13 @@ export default function EditorApp() {
     }
     const nextGeo: GeoPayload = {
       ...geo,
-      glyphs: { ...glyphs, items: nextItems, glyphSeeds, glyphSeedMemory, editor },
+      glyphs: {
+        ...glyphs,
+        items: nextItems,
+        glyphSeeds,
+        glyphSeedMemory,
+        editor: { ...editor, glyphOrder: nextOrder },
+      },
     };
     setHasUnsavedChanges(true);
     setGeo(nextGeo);
@@ -3597,7 +3674,8 @@ export default function EditorApp() {
     delete glyphSeeds[name];
     const glyphSeedMemory = { ...(glyphs.glyphSeedMemory || {}) };
     delete glyphSeedMemory[name];
-    const editor = glyphs.editor ? { ...glyphs.editor } : undefined;
+    const nextOrder = names.filter((entry) => entry !== name);
+    const editor: EditorConfig = { ...(glyphs.editor || {}), glyphOrder: nextOrder };
     if (editor?.ink) {
       const ink = { ...editor.ink };
       delete ink[name];
@@ -3606,14 +3684,14 @@ export default function EditorApp() {
     }
     const nextGeo: GeoPayload = {
       ...geo,
-      glyphs: { ...glyphs, items: nextItems, glyphSeeds, glyphSeedMemory, ...(editor ? { editor } : {}) },
+      glyphs: { ...glyphs, items: nextItems, glyphSeeds, glyphSeedMemory, editor },
     };
     setHasUnsavedChanges(true);
     setGeo(nextGeo);
     // 移除是结构性操作，点击后立即写回字库，不再等用户手动保存。
     void save(nextGeo, { preserveCanvasUnsaved: true });
     if (name === glyphName) {
-      const remaining = Object.keys(nextItems);
+      const remaining = nextOrder;
       const nextGlyph = remaining[Math.min(names.indexOf(name), remaining.length - 1)] || "";
       setGlyphName(nextGlyph);
       setReferenceText(glyphInfo(nextGlyph).base);
@@ -3700,13 +3778,17 @@ export default function EditorApp() {
     const preview = drag.preview || geo;
     if (preview?.glyphs) {
       const currentGlyphs = preview.glyphs;
-      const currentNames = Object.keys(currentGlyphs.items);
+      const currentNames = orderedGlyphNames(currentGlyphs.items, currentGlyphs.editor?.glyphOrder);
       if (currentNames.length === nextOrder.length && currentNames.every((name) => nextOrder.includes(name))) {
         const nextItems: Record<string, EditableElement[]> = {};
         for (const name of nextOrder) nextItems[name] = currentGlyphs.items[name];
         drag.preview = {
           ...preview,
-          glyphs: { ...currentGlyphs, items: nextItems },
+          glyphs: {
+            ...currentGlyphs,
+            items: nextItems,
+            editor: { ...(currentGlyphs.editor || {}), glyphOrder: nextOrder },
+          },
         };
       }
     }
@@ -3903,7 +3985,7 @@ export default function EditorApp() {
   }, [allMetrics]);
 
   if (loading) {
-    return <div className="loading-screen"><span className="loading-mark">hg</span><span>正在读取字库…</span></div>;
+    return <div className="loading-screen"><span className="loading-mark">{YuragiMark}</span><span>正在读取字库…</span></div>;
   }
 
   if (!geo || !group) {
@@ -4092,7 +4174,7 @@ export default function EditorApp() {
               {helpOpen && (
                 <div className="help-pop" id="editor-help" role="dialog" aria-label="快捷键与规矩">
                   <b>这是什么</b>
-                  这是一个拙趣感手写字体生成器：把随手写下的笔画变成一段带有手写温度和自然变化的文字，实时预览并导出。
+                  Yuragi 是一个拙趣感手绘字生成器：把随手写下的笔画变成一段带有手写温度和自然变化的文字，实时预览并导出。
                   <b>画布编辑</b>
                   空白处 <ShortcutKey label="拖动" icon={<MouseIcon />} /> 框选，<ShortcutKey label="Shift" /> 点击增减选择，<ShortcutKey label="Shift" /> 框选追加。<ShortcutKey label="拖动" icon={<MouseIcon />} /> 选中笔画可一起移动，<ShortcutKey label="Esc" /> 清空，<span className="shortcut-sequence"><ShortcutModifier /><ShortcutKey label="A" /></span> 全选。
                   <b>快捷键</b>

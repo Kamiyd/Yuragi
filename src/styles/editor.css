@@ -1,5 +1,5 @@
 /* ---------------------------------------------------------------------------
-   hand-glyph editor · 悬浮面板布局
+   Yuragi editor · 悬浮面板布局
    画布满屏铺底，左右面板是浮在画布之上的圆角卡片，可以各自收起。
    --------------------------------------------------------------------------- */
 
@@ -1320,6 +1320,7 @@ button { color: inherit; }
 
 .loading-screen { display: grid; place-items: center; align-content: center; gap: 14px; width: 100vw; height: 100vh; padding: 24px; background: var(--stage); color: var(--muted); font-size: 12.5px; text-align: center; }
 .loading-mark { display: grid; place-items: center; width: 42px; height: 42px; border-radius: var(--r-card); background: var(--ink); color: #fff; font: 600 17px var(--font); letter-spacing: -.12em; }
+.loading-mark .brand-mark { width: 29px; height: 29px; }
 .error-screen strong { color: var(--ink); font-size: 15px; font-weight: 700; }
 .error-screen code { padding: 4px 8px; border-radius: 7px; background: var(--soft); font: 11.5px var(--font); }
 

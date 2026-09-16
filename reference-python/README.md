@@ -68,7 +68,16 @@ python3 scripts/handdraw.py ts      geo.json                       # TypeScript 
 
 ```bash
 python3 scripts/handdraw.py edit my-font.json     # 默认 127.0.0.1:8731
+python3 scripts/handdraw.py edit my-font.json --dev   # 调 web/src：页面交给 4321 的 Astro
 ```
+
+界面是 `web/` 那个 Astro + React 应用，构建产物 `web/dist/` 跟着仓库走 —— 拿来就能开，
+不用装 node。改了 `web/src` 要 `cd web && npm run build` 重新出一份再提交。
+`--dev` 是显式开关，不会自动嗅探 4321（那上面跑着的不一定是这份 `web/`）。
+
+**真相层是命令行给的那份文件**，界面里没有「新建字库 / 导入 / 下载工程文件」——
+换一份就换一条命令。右栏「数据」显示正在写回哪个绝对路径，旁边「重新读取」
+用来捡回编辑器之外的改动。
 
 文件不存在就自己建一份空库（64 网格，汉字 `sw 2.8` / 拉丁 `sw 3.4`，
 手感 0.9），点左栏加号先创建未命名的空白字形；再输入参考字并点击保存，才写入字形标题。

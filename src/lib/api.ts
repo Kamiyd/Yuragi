@@ -99,6 +99,7 @@ type RowRequest = {
   text: string; seed?: number; ampk?: number; mode?: "han" | "latin"; amp?: number; over?: number;
   vary?: boolean; varyk?: number; glyphSeeds?: Record<string, number> | null;
   glyphData?: GlyphLibrary; track?: number | null; word?: number; maxWidth?: number | null; lineHeight?: number;
+  glyphOrder?: string[];
 };
 
 /** 原来那个 fetch 包装的位置换成本地调用；接口形状一模一样。 */
@@ -130,6 +131,7 @@ export async function requestJSON<T>(url: string, init?: RequestInit): Promise<T
       varyk: Number(req.varyk ?? 1),
       glyphSeeds: req.glyphSeeds ?? null,
       glyphData: req.glyphData,
+      glyphOrder: req.glyphOrder,
       track: req.track ?? null,
       word: req.word === undefined ? undefined : Number(req.word),
       maxWidth: req.maxWidth === undefined || req.maxWidth === null ? null : Number(req.maxWidth),

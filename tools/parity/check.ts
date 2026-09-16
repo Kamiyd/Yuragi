@@ -193,6 +193,24 @@ for (const c of fixtures.row_edge) {
   close(`${label} ratio`, result.ratio, c.result.ratio);
 }
 
+// 9c. 自动换行：折行边界按渲染后的实际宽高算，多行共用一个 viewBox
+for (const c of fixtures.row_wrap) {
+  const { glyphs } = payloadOf(c.lib);
+  const result = renderRow({
+    text: c.text, seed: 42, ampk: glyphs.jit, mode: c.mode,
+    amp: glyphs.amp, over: glyphs.over, vary: true, varyk: glyphs.vary,
+    glyphSeeds: glyphs.glyphSeeds, glyphData: glyphs,
+    track: glyphs.track, word: glyphs.word,
+    maxWidth: c.maxWidth, lineHeight: 44,
+  });
+  const label = `row_wrap ${c.lib} "${c.text}" maxWidth=${c.maxWidth}`;
+  eq(`${label} svg`, result.svg, c.result.svg);
+  eq(`${label} table`, result.table, c.result.table);
+  eq(`${label} lineCount`, result.lineCount, c.result.lineCount);
+  close(`${label} vbw`, result.vb[0], c.result.vb[0]);
+  close(`${label} vbh`, result.vb[1], c.result.vb[1]);
+}
+
 // 10. write：多行、断行
 for (const c of fixtures.write) {
   const data = loadRaw(c.lib);

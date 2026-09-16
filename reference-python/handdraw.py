@@ -5,6 +5,7 @@
                                                       排完自动拉起编辑器看这一版；
                                                       不想开加 --no-edit
     python3 handdraw.py edit    geo.json [-p 8731]    浏览器里拖骨架改字（写回本文件）
+                                       [--dev]        改 web/src 时把页面交给 4321 的 Astro
     python3 handdraw.py vary    geo.json [-n 8]       同一个字写 n 遍，看变化够不够
     python3 handdraw.py gallery geo.json -o g.html    自检画廊（多尺寸 + 亮暗）
     python3 handdraw.py svg     geo.json -o out/      每个字一个 .svg
@@ -149,6 +150,23 @@ def draw(items, idx, scale, g_amp=1.0, g_over=1.0):
             item["w"] = round(wk, 3)
         ds.append(item)
     return ds
+
+
+# 版式：汉字一字一格，拉丁各带 adv 绕基线排。两套的支点不一样，混在一个字库里
+# 只能二选一 —— 所以它是**字库级的选择**，写在文件上。老文件没有这个字段，按
+# 「有没有 adv」推断（跟以前一模一样）；空的新库推断不出来，这正是要显式记一笔的
+# 原因：新建一个拉丁库时它还一个字母都没有。
+def read_mode(value):
+    return value if value in ("han", "latin") else None
+
+
+def infer_mode(items):
+    return "latin" if any(els and els[0].get("adv") is not None
+                          for els in (items or {}).values()) else "han"
+
+
+def layout_mode(g):
+    return read_mode(g.get("mode")) or infer_mode(g.get("items"))
 
 
 # 字库级手感参数：默认全是 1.0（= 不改变现有行为，老文件照跑）
@@ -339,9 +357,7 @@ def write_lines(g, text, seed, do_vary=True):
     lines = [l for l in text.replace("/", "\n").split("\n") if l != ""]
     blocks, W, H = [], 0.0, 0.0
     for li, line in enumerate(lines):
-        has_latin_metrics = any(items and items[0].get("adv") is not None
-                                for items in g["items"].values())
-        mode = "latin" if line.strip() and has_latin_metrics else "han"
+        mode = "latin" if line.strip() and layout_mode(g) == "latin" else "han"
         vb, sw = float(g.get("vb", 64)), float(g.get("sw", 2.8))
         p = params_of(g)
         names = list(g["items"])
@@ -493,6 +509,8 @@ if __name__ == "__main__":
     if cmd == "edit":
         import edit
         port = int(a[a.index("-p") + 1]) if "-p" in a else 8731
+        if "--dev" in a:                   # 前端源码调试：页面交给 4321 的 Astro
+            edit.DEV_PROXY = True
         edit.serve(geo, port=port)
     elif cmd == "write":
         import random

@@ -8,7 +8,7 @@ import { draw, pathMarkup, paramsOf, seedMap, type RenderPath } from "./draw";
 import { pathToPolys, type Poly } from "./flatten";
 import { fmtFixed, pyG, pyRound } from "./num";
 import * as rowmod from "./row";
-import { toGeo, type EditableElement, type GlyphLibrary } from "./library";
+import { orderedGlyphNames, toGeo, type EditableElement, type GlyphLibrary } from "./library";
 import { vary as varyGlyph, type GeoElement } from "./vary";
 
 export type RowCell = { name: string | null; s: number; diff: number | null; thin: boolean };
@@ -40,6 +40,8 @@ export type RowOptions = {
   varyk?: number;
   glyphSeeds?: Record<string, number> | null;
   glyphData: GlyphLibrary;
+  /** 编辑器显式传入的字形顺序；旧调用不传时保持原有行为。 */
+  glyphOrder?: string[];
   track?: number | null;
   word?: number;
   /** 预览区可用的 CSS 像素宽度；省略时保持旧的单行结果。 */
@@ -60,7 +62,7 @@ export function renderRow(options: RowOptions): RowResult {
   const word = options.word === undefined ? 0 : Number(options.word);
   const vb = Number(g.vb ?? 64);
   const sw = Number(g.sw ?? 2.8);
-  const names = Object.keys(g.items);
+  const names = orderedGlyphNames(g.items, options.glyphOrder);
   const glyphSeeds = seedMap(options.glyphSeeds === undefined || options.glyphSeeds === null
     ? g.glyphSeeds : options.glyphSeeds);
   const picked = rowmod.pick(text, names);

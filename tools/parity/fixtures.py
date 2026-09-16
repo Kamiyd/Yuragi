@@ -189,6 +189,22 @@ def fixture():
         edge_cases.append({k: v for k, v in case.items() if k != "g"} | {"result": row})
     out["row_edge"] = edge_cases
 
+    # 6c. 自动换行：预览按渲染后的实际宽高折行，多行共用一个 viewBox
+    wrap_cases = []
+    for lib in ("han-sample.json", "latin-compact.json"):
+        glyphs = geo_payload(lib)["glyphs"]
+        names = list(glyphs["items"])
+        mode = "latin" if lib.startswith("latin") else "han"
+        text = "".join(names[:7])
+        for max_width in (90.0, 160.0, 320.0):
+            row = edit.render_row(text, 42, glyphs["jit"], mode,
+                                  glyphs["amp"], glyphs["over"], True, glyphs["vary"],
+                                  glyphs["glyphSeeds"], glyphs, glyphs["track"],
+                                  glyphs["word"], max_width, 44.0)
+            wrap_cases.append({"lib": lib, "text": text, "mode": mode,
+                               "maxWidth": max_width, "result": row})
+    out["row_wrap"] = wrap_cases
+
     # 7. write（多行、含 / 断行）
     write_cases = []
     for lib, text in (("han-sample.json", "我和我/我和你"), ("han-sample.json", "我和"),

@@ -18,6 +18,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 WEB_DIST = os.path.realpath(os.path.join(HERE, "..", "web", "dist"))
 DEV_SERVER_HOST = "127.0.0.1"
 DEV_SERVER_PORT = 4321
+# 代理到 Astro dev server 是**显式开关**，不是自动嗅探。
+# 4321 上跑着的不一定是这份 web/ —— 独立网页版用的是同一个端口，而它把字库
+# 存在 localStorage 里、根本不碰磁盘。自动代理会让人以为在编命令行给的那份文件，
+# 其实一个字节都没写进去。要改 web/src 就显式开：`edit --dev` 或 HAND_GLYPH_DEV=1。
+DEV_PROXY = os.environ.get("HAND_GLYPH_DEV") in ("1", "true", "yes")
 sys.path.insert(0, HERE)
 
 import dpath, row as rowmod
@@ -77,6 +82,27 @@ def normalize_glyphs(geo):
     return {"items": geo}
 
 
+def ordered_glyph_names(items, configured_order=None):
+    """字形顺序：种子按序号算，所以「谁排第几」必须是显式的。
+
+    items 是 JSON 对象，键序只反映写入顺序（改过的字会跑到前面），承担不了
+    「用户排的顺序」这个语义 —— 所以顺序单独记在 editor.glyphOrder 里。
+    顺序里无效或重复的名字忽略，新增但还没写进顺序的追加到末尾。
+    """
+    names = list(items)
+    if not configured_order:
+        return names
+    remaining = set(names)
+    ordered = []
+    for value in configured_order:
+        name = str(value)
+        if name in remaining:
+            remaining.discard(name)
+            ordered.append(name)
+    ordered += [name for name in names if name in remaining]
+    return ordered
+
+
 def seed_map(value):
     """清洗可选的逐字种子表；旧字库没有这个字段也完全兼容。"""
     if not isinstance(value, dict):
@@ -123,6 +149,15 @@ def editor_config(value, names):
         out["rowMode"] = mode
     if "rowText" in value:
         out["rowText"] = str(value.get("rowText") or "").replace("/", "").replace("\n", "")
+    if isinstance(value.get("glyphOrder"), list):
+        order, seen = [], set()
+        for item in value["glyphOrder"]:
+            name = str(item)
+            if name in names and name not in seen:
+                seen.add(name)
+                order.append(name)
+        if order:
+            out["glyphOrder"] = order
 
     ink = value.get("ink")
     if isinstance(ink, dict):
@@ -177,10 +212,8 @@ def editor_config(value, names):
 
 
 def default_track(glyphs):
-    """中文默认无额外字距；只有带 adv 的拉丁字库沿用拉丁默认字距。"""
-    is_latin = any(els and isinstance(els[0], dict) and "adv" in els[0]
-                   for els in glyphs.get("items", {}).values())
-    return rowmod.TRACK if is_latin else 0.0
+    """中文默认无额外字距；拉丁字库沿用拉丁默认字距。"""
+    return rowmod.TRACK if H.layout_mode(glyphs) == "latin" else 0.0
 
 
 def load_geo():
@@ -191,6 +224,7 @@ def load_geo():
         "file": os.path.abspath(PATH),
         "glyphs": dict(H.params_of(glyphs),
                        vb=float(glyphs.get("vb", 24)), sw=float(glyphs.get("sw", 1.5)),
+                       mode=H.read_mode(glyphs.get("mode")),
                        track=float(glyphs.get("track", default_track(glyphs))),
                        word=float(glyphs.get("word", rowmod.WORD)),
                        seed=preview_seed(glyphs.get("seed")),
@@ -213,6 +247,10 @@ def _num(v):
 
 def save_geo(glyphs):
     out = {"vb": _num(glyphs["vb"]), "sw": _num(glyphs["sw"])}
+    # 只有明确记过版式的库才写这一行：老文件不记，保存回去一个字节都不变。
+    mode = H.read_mode(glyphs.get("mode"))
+    if mode:
+        out["mode"] = mode
     for k in H.PARAMS:                         # 默认值不写进文件，diff 才干净
         if abs(float(glyphs.get(k, 1.0)) - 1.0) > 1e-9:
             out[k] = _num(glyphs[k])
@@ -249,12 +287,17 @@ def render(vb, idx, items, g_amp=1.0, g_over=1.0, local=None):
 
 def render_row(text, seed, ampk, mode, g_amp=1.0, g_over=1.0,
                do_vary=True, varyk=1.0, glyph_seeds=None, glyph_data=None,
-               track=None, word=rowmod.WORD):
+               track=None, word=rowmod.WORD, max_width=None, line_height=44.0,
+               glyph_order=None):
     """底下那条行预览。
 
     **这里的每一步都照抄 handdraw.write_lines 的单行分支** —— 种子怎么算、
     重写在哪一层、摆正拿哪份几何，全一样。所以同一个种子下，这条预览就是
     `write` 出的那一行，不是「差不多的一行」。改动这个函数时对着那边一起改。
+
+    `max_width` 给了就按**渲染后的实际宽高**自动换行（不是数字符）：拉丁字
+    adv 和字面高度都不一样，按字符估会让窄体溢出、矮体提前折行。每个候选子行
+    在排版时就渲一次，所以换行边界和最终显示的字号完全一致。
     """
     # Live previews use an isolated draft, never mutate the saved library.
     g = glyph_data if glyph_data is not None else GEO
@@ -262,89 +305,163 @@ def render_row(text, seed, ampk, mode, g_amp=1.0, g_over=1.0,
         track = rowmod.TRACK if mode == "latin" else 0.0
     vb = float(g.get("vb", 64))
     sw = float(g.get("sw", 2.8))
-    names = list(g["items"].keys())
+    names = ordered_glyph_names(g["items"], glyph_order)
     glyph_seeds = seed_map(g.get("glyphSeeds") if glyph_seeds is None else glyph_seeds)
-    picked = rowmod.pick(text, g["items"])
-
-    miss = [ch for nm, ch, ok in picked if nm is None]
+    picked = rowmod.pick(text, names)
     dup = []          # 兼容旧 API；显式变体与叠字轮换都由 row.pick 处理
-    seq = [nm for nm, ch, ok in picked]
+    entries = [{"name": nm, "char": ch, "source_index": i}
+               for i, (nm, ch, ok) in enumerate(picked)]
+    miss = [e["char"] for e in entries if e["name"] is None]
 
-    # 每一次出现都自己重写一遍 —— 跟 write 同一个种子公式（li=0 这一行）
-    geos = {}
-    for oi, n in enumerate(seq):
-        if not n or n not in g["items"]:
-            continue
-        els = [to_geo(e) for e in g["items"][n]]
-        local = rowmod.local_seed(glyph_seeds, n)
-        vary_seed = (local if local is not None else seed) * 131 + oi * 17
-        geos[oi] = H.varymod.vary(els, vary_seed, cell=vb, amp=varyk) \
-            if do_vary else els
-
-    def item_seed(name, oi):
-        return rowmod.effective_seed(glyph_seeds, name, seed)
-
-    def polys(n, oi=None):
-        """这一次出现实际要渲的那份几何 —— 摆正必须按它算，不是字库里那份。"""
-        els = geos.get(oi) if oi is not None and oi in geos else \
-            [to_geo(e) for e in g["items"].get(n, [])]
-        out = []
-        for el in els:
-            if el.get("t", "path") == "path":
-                out += path_to_polys(el["d"])
-        return out
-
+    advs = {}
     if mode == "latin":
         advs = {n: float(els[0].get("adv", vb)) for n, els in g["items"].items() if els}
-        L, width = rowmod.latin_layout([n if n else " " for n in seq], polys, advs,
-                                       seed=seed, amp_k=ampk,
+
+    def render_line(line_entries, line_index):
+        seq = [e["name"] for e in line_entries]
+
+        # 每一次出现都自己重写一遍 —— 跟 write 同一个种子公式；source_index 让换行时
+        # 同一个字仍然有稳定的局部流，line_index 只负责把不同的行分开。
+        geos = {}
+        for oi, n in enumerate(seq):
+            if not n or n not in g["items"]:
+                continue
+            els = [to_geo(e) for e in g["items"][n]]
+            local = rowmod.local_seed(glyph_seeds, n)
+            source_index = line_entries[oi]["source_index"]
+            vary_seed = (local if local is not None else seed) * 131 \
+                + source_index * 17 + line_index * 7
+            geos[oi] = H.varymod.vary(els, vary_seed, cell=vb, amp=varyk) \
+                if do_vary else els
+
+        def item_seed(name, oi=None):
+            return rowmod.effective_seed(glyph_seeds, name, seed + line_index)
+
+        def polys(n, oi=None):
+            """这一次出现实际要渲的那份几何 —— 摆正必须按它算，不是字库里那份。"""
+            els = geos.get(oi) if oi is not None and oi in geos else \
+                [to_geo(e) for e in g["items"].get(n, [])]
+            out = []
+            for el in els:
+                if el.get("t", "path") == "path":
+                    out += path_to_polys(el["d"])
+            return out
+
+        if mode == "latin":
+            L, _ = rowmod.latin_layout([n if n else " " for n in seq], polys, advs,
+                                       seed=seed + line_index, amp_k=ampk,
                                        track=float(track), word=float(word),
                                        seed_for=lambda name, oi: item_seed(name, oi),
                                        local_for=lambda name, oi: rowmod.local_seed(glyph_seeds, name) is not None)
+            for it in L:
+                it["baseline_dy"] = it["dy"]
+        else:
+            L = rowmod.han_layout(seq, polys, cell=vb, seed=seed + line_index, amp_k=ampk,
+                                  track=float(track),
+                                  seed_for=lambda name, oi: item_seed(name, oi),
+                                  local_for=lambda name, oi: rowmod.local_seed(glyph_seeds, name) is not None)
+
+        box = rowmod.bounds(L, polys, cell=vb)
+        glyphs_out = []
+        for layout_index, it in enumerate(L):
+            oi = it.get("source_index", layout_index)
+            n = it["name"]
+            if oi not in geos or not n:
+                continue
+            # idx 决定笔迹的种子；每次出现都换一个，两个「天」的线也不会同一个抖法
+            source_index = line_entries[oi]["source_index"] if oi < len(line_entries) else oi
+            paths = H.draw(geos[oi],
+                           rowmod.hand_seed(names.index(n) + 97 * source_index + 977 * line_index,
+                                            rowmod.local_seed(glyph_seeds, n)),
+                           vb / 24.0, g_amp, g_over)
+            inner = "".join(
+                ('<path d="%s" fill="currentColor" stroke="none"/>' % p["d"]) if p.get("f")
+                else ('<path d="%s" stroke-width="%g"/>' % (p["d"], sw * p["w"])) if p.get("w")
+                else ('<path d="%s"/>' % p["d"]) for p in paths)
+            glyphs_out.append({"transform": it["tf"], "body": inner})
+
+        prev = None
+        table = []
         for it in L:
-            it["baseline_dy"] = it["dy"]
-    else:
-        L = rowmod.han_layout(seq, polys, cell=vb, seed=seed, amp_k=ampk,
-                              track=float(track),
-                              seed_for=lambda name, oi: item_seed(name, oi),
-                              local_for=lambda name, oi: rowmod.local_seed(glyph_seeds, name) is not None)
-        width = vb * len(seq)
+            d = None if prev is None else abs(it["s"] - prev) * 100
+            table.append({"name": it["name"], "s": round(it["s"], 3),
+                          "diff": None if d is None else round(d, 1),
+                          "thin": d is not None and d < 3.5 * ampk})
+            prev = it["s"]
+        return {"glyphs": glyphs_out, "table": table, "box": box}
 
-    x0, y0, x1, y1 = rowmod.bounds(L, polys, cell=vb)
     pad = 5.0
-    vbx, vby = x0 - pad, y0 - pad
-    vbw, vbh = (x1 - x0) + 2 * pad, (y1 - y0) + 2 * pad
 
-    body = []
-    for layout_index, it in enumerate(L):
-        oi = it.get("source_index", layout_index)
-        n = it["name"]
-        if oi not in geos or not n:
-            continue
-        # idx 决定笔迹的种子；每次出现都换一个，两个「天」的线也不会同一个抖法
-        paths = H.draw(geos[oi], rowmod.hand_seed(names.index(n) + 97 * oi,
-                                                  rowmod.local_seed(glyph_seeds, n)),
-                       vb / 24.0, g_amp, g_over)
-        inner = "".join(
-            ('<path d="%s" fill="currentColor" stroke="none"/>' % p["d"]) if p.get("f")
-            else ('<path d="%s" stroke-width="%g"/>' % (p["d"], sw * p["w"])) if p.get("w")
-            else ('<path d="%s"/>' % p["d"]) for p in paths)
-        body.append('<g transform="%s">%s</g>' % (it["tf"], inner))
+    def line_width_at_preview_height(line):
+        x0, y0, x1, y1 = line["box"]
+        width = (x1 - x0) + 2 * pad
+        height = (y1 - y0) + 2 * pad
+        return width * line_height / height if height > 0 else width
 
-    svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="%.2f %.2f %.2f %.2f" '
+    def wrap_entries():
+        whole = lambda: [{"entries": entries, "rendered": render_line(entries, 0)}]
+        try:
+            limit = float(max_width)
+        except (TypeError, ValueError):
+            limit = float("nan")
+        if not (limit == limit) or limit <= 0 or len(entries) <= 1:
+            return whole()
+        lines, line, rendered = [], [], None
+        for entry in entries:
+            candidate = line + [entry]
+            candidate_rendered = render_line(candidate, len(lines))
+            # 单个字再宽也必须落行，否则一个超宽字会触发无穷拆分。
+            if line and line_width_at_preview_height(candidate_rendered) > limit:
+                lines.append({"entries": line, "rendered": rendered})
+                line = [entry]
+                rendered = render_line(line, len(lines))
+            else:
+                line, rendered = candidate, candidate_rendered
+        if line and rendered:
+            lines.append({"entries": line, "rendered": rendered})
+        return lines or whole()
+
+    lines = wrap_entries()
+
+    # 保持未启用自动换行时的 SVG 字符串完全不变，老的 parity fixtures 也继续有效。
+    if len(lines) == 1:
+        one = lines[0]["rendered"]
+        x0, y0, x1, y1 = one["box"]
+        vbw, vbh = (x1 - x0) + 2 * pad, (y1 - y0) + 2 * pad
+        body = "".join('<g transform="%s">%s</g>' % (gl["transform"], gl["body"])
+                       for gl in one["glyphs"])
+        svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="%.2f %.2f %.2f %.2f" '
+               'fill="none" stroke="currentColor" stroke-width="%g" stroke-linecap="round" '
+               'stroke-linejoin="round">%s</svg>' % (x0 - pad, y0 - pad, vbw, vbh, sw, body))
+        return {"svg": svg, "table": one["table"], "miss": miss, "dup": dup,
+                "vb": [vbw, vbh], "ratio": vbw / vbh if vbh else 1, "lineCount": 1}
+
+    # 多行共用一个 viewBox，但每个字都直接带上该行的平移和等比缩放，根节点的
+    # children 仍然是逐字 group。每行先归一到同一个内部行高，再由预览 SVG
+    # 统一映射到 44px，因此不同字面高度不会让某些行看起来被压扁。
+    line_unit = max(max(1.0, (ln["rendered"]["box"][3] - ln["rendered"]["box"][1]) + 2 * pad)
+                    for ln in lines)
+    width, y, parts = 0.0, pad, []
+    for ln in lines:
+        line = ln["rendered"]
+        x0, y0, x1, y1 = line["box"]
+        line_vbw, line_vbh = (x1 - x0) + 2 * pad, (y1 - y0) + 2 * pad
+        scale = line_unit / line_vbh
+        width = max(width, line_vbw * scale)
+        line_tf = "translate(%.2f %.2f) scale(%.4f)" % (
+            pad - (x0 - pad) * scale, y - (y0 - pad) * scale, scale)
+        for gl in line["glyphs"]:
+            parts.append('<g transform="%s %s">%s</g>' % (line_tf, gl["transform"], gl["body"]))
+        y += line_unit + 7.0
+    height = y - 7.0 + pad
+    vbw = width + 2 * pad
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %.2f %.2f" '
            'fill="none" stroke="currentColor" stroke-width="%g" stroke-linecap="round" '
-           'stroke-linejoin="round">%s</svg>' % (vbx, vby, vbw, vbh, sw, "".join(body)))
-
-    prev = None
-    table = []
-    for it in L:
-        d = None if prev is None else abs(it["s"] - prev) * 100
-        table.append({"name": it["name"], "s": round(it["s"], 3),
-                      "diff": None if d is None else round(d, 1),
-                      "thin": d is not None and d < 3.5 * ampk})
-        prev = it["s"]
+           'stroke-linejoin="round">%s</svg>' % (vbw, height, sw, "".join(parts)))
+    table = [cell for ln in lines for cell in ln["rendered"]["table"]]
     return {"svg": svg, "table": table, "miss": miss, "dup": dup,
-            "vb": [vbw, vbh], "ratio": vbw / vbh if vbh else 1}
+            "vb": [vbw, height], "ratio": vbw / height if height else 1,
+            "lineCount": len(lines)}
 
 
 # ── HTTP ──────────────────────────────────────────────────────────────
@@ -374,10 +491,13 @@ class Handler(BaseHTTPRequestHandler):
     def _proxy_dev_get(self):
         """开发时把前端请求交给 Astro，保证 8731 和 4321 用同一份源码。
 
-        Python 服务仍然只负责 `/api/*` 和旧版静态回退；只要 4321 在运行，
-        页面、源码模块和 Vite 的开发资源都从那里来。这样改 `web/src` 后，
-        不需要再手动 build 一次才能让 8731 看到同样的界面。
+        Python 服务仍然只负责 `/api/*`；开了开关且 4321 在运行时，页面、源码
+        模块和 Vite 的开发资源都从那里来，改 `web/src` 后不用先 build 一次。
+
+        **默认关闭**：4321 上跑着的不一定是这份 web/。
         """
+        if not DEV_PROXY:
+            return False
         # 避免用户把 Python 服务也绑定到 4321 时代理到自己。
         if self.server.server_port == DEV_SERVER_PORT:
             return False
@@ -478,7 +598,10 @@ class Handler(BaseHTTPRequestHandler):
                                bool(req.get("vary", True)), float(req.get("varyk", 1.0)),
                                req.get("glyphSeeds"), req.get("glyphData"),
                                float(track),
-                               float(req.get("word", rowmod.WORD))),
+                               float(req.get("word", rowmod.WORD)),
+                               req.get("maxWidth"),
+                               float(req.get("lineHeight") or 44.0),
+                               req.get("glyphOrder")),
                     ensure_ascii=False))
             if route == "/api/save":
                 global GEO
@@ -488,6 +611,7 @@ class Handler(BaseHTTPRequestHandler):
                         {"error": "保存请求必须提供扁平的 glyphs 字段。"},
                         ensure_ascii=False))
                 GEO = {"vb": _num(glyphs["vb"]), "sw": _num(glyphs["sw"]),
+                       "mode": H.read_mode(glyphs.get("mode")),
                        "track": _num(glyphs.get("track", default_track(glyphs))),
                        "word": _num(glyphs.get("word", rowmod.WORD)),
                        "seed": preview_seed(glyphs.get("seed")),

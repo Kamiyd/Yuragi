@@ -17,6 +17,8 @@ export type EditableItems = Record<string, EditableElement[]>;
 export type EditorConfig = {
   rowMode?: "library" | "custom";
   rowText?: string;
+  /** 字形在编辑器与行预览中的显式顺序；不能依赖 items 对象键顺序。 */
+  glyphOrder?: string[];
   ink?: Record<string, { color?: string; opacity?: number }>;
   export?: { scope?: "row" | "glyphs"; format?: "svg" | "png"; scale?: number };
   viewHeight?: number;
@@ -40,6 +42,29 @@ export type GlyphLibrary = {
   editor: EditorConfig;
   items: EditableItems;
 };
+
+/**
+ * 返回稳定的字形顺序。
+ *
+ * JavaScript 会把纯数字对象键（例如 "1"、"8"）自动排到普通字符串键
+ * 前面，所以 items 本身不能承担“用户添加顺序”这个语义。显式顺序里无效
+ * 或重复的名字会被忽略，新增但还没写入顺序的名字则追加到末尾。
+ */
+export function orderedGlyphNames(items: Record<string, unknown>, configuredOrder?: Iterable<string>): string[] {
+  const names = Object.keys(items);
+  if (!configuredOrder) return names;
+
+  const remaining = new Set(names);
+  const ordered: string[] = [];
+  for (const value of configuredOrder) {
+    const name = String(value);
+    if (remaining.delete(name)) ordered.push(name);
+  }
+  for (const name of names) {
+    if (remaining.has(name)) ordered.push(name);
+  }
+  return ordered;
+}
 
 /** 一个元素 -> 编辑器用的形。path 摊成 segs，别的类型原样带着。 */
 export function toEdit(el: GeoElement): EditableElement {
@@ -115,6 +140,18 @@ export function editorConfig(value: unknown, names: Iterable<string>): EditorCon
   const out: EditorConfig = {};
   if (source.rowMode === "library" || source.rowMode === "custom") out.rowMode = source.rowMode;
   if ("rowText" in source) out.rowText = String(source.rowText ?? "").replace(/\//g, "").replace(/\n/g, "");
+  if (Array.isArray(source.glyphOrder)) {
+    const order: string[] = [];
+    const seen = new Set<string>();
+    for (const value of source.glyphOrder) {
+      const name = String(value);
+      if (known.has(name) && !seen.has(name)) {
+        seen.add(name);
+        order.push(name);
+      }
+    }
+    if (order.length) out.glyphOrder = order;
+  }
 
   if (source.ink && typeof source.ink === "object") {
     const cleanInk: Record<string, { color?: string; opacity?: number }> = {};

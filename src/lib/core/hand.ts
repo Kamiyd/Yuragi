@@ -5,6 +5,12 @@
    用 Catmull-Rom 转成平滑贝塞尔。转角处把点重复一次来收紧切线，
    不然所有折角都会被磨圆成一坨。
 
+   catmullRom 里还有两道「不许自交」的闸，只保证路径不打结，不改手感：
+   退化段（转角重复点生成的首尾同点曲线）直接不画，它画出来是个小圈；
+   两个控制点在弦上的投影之和不超过 1，超了等比收回来，不然收笔越位那一小截
+   会在笔尖折回去。中心线一旦打结，Figma 这类「描边转轮廓再填充」的渲染器
+   就会在那儿挖出白楔子 —— 浏览器看不出来，导出才现形。
+
    这份文件是 hand.py 的逐行移植。改这里的任何一个系数都会把整套字带偏，
    而且跟 Python 那份就对不上了 —— 对照测试 tools/parity 会当场红。 */
 import type { Point } from "./dpath";
@@ -12,14 +18,31 @@ import { fmtFixed, pmod, pyRoundInt, hypot } from "./num";
 
 type Sample = [number, number, boolean];   // x, y, 是不是硬角
 
+/** 手柄投影到弦上的比例：1 表示正好落在对端。 */
+function handleT(anchor: Point, handle: Point, other: Point): number {
+  const vx = other[0] - anchor[0];
+  const vy = other[1] - anchor[1];
+  const L2 = vx * vx + vy * vy;
+  if (L2 === 0) return 0;
+  return ((handle[0] - anchor[0]) * vx + (handle[1] - anchor[1]) * vy) / L2;
+}
+
 function catmullRom(pts: Point[], closed = false): string {
   const p = closed ? [...pts, pts[0]] : [...pts];
   const d = [`M${fmtFixed(p[0][0], 2)} ${fmtFixed(p[0][1], 2)}`];
   const ext = [p[0], ...p, p[p.length - 1]];
   for (let i = 0; i < p.length - 1; i += 1) {
     const p0 = ext[i], p1 = ext[i + 1], p2 = ext[i + 2], p3 = ext[i + 3];
-    const c1: Point = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
-    const c2: Point = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+    if (p1[0] === p2[0] && p1[1] === p2[1]) continue;   // 转角重复点：段长为 0，画出来是个小圈，会让描边自交
+    let c1: Point = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+    let c2: Point = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+    // 两个手柄加起来别超过弦长，超了就等比收回来：控制多边形一单调，这一段就不会折回去。
+    // 收笔越位那一小截旁边跟着一整步长的段，切线是按邻点算的，不收就会在笔尖打个小圈。
+    const t = handleT(p1, c1, p2) + handleT(p2, c2, p1);
+    if (t > 1) {
+      c1 = [p1[0] + (c1[0] - p1[0]) / t, p1[1] + (c1[1] - p1[1]) / t];
+      c2 = [p2[0] + (c2[0] - p2[0]) / t, p2[1] + (c2[1] - p2[1]) / t];
+    }
     d.push(`C${fmtFixed(c1[0], 2)} ${fmtFixed(c1[1], 2)} ${fmtFixed(c2[0], 2)} ${fmtFixed(c2[1], 2)} `
       + `${fmtFixed(p2[0], 2)} ${fmtFixed(p2[1], 2)}`);
   }

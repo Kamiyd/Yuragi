@@ -23,7 +23,8 @@ const OVER_LONG = 0.5;           // 收笔越位：闭合图形不越位
 const CORNER_DEG = 32;           // 转向超过这个角度算硬角，滤镜在那儿收着
 const STEP = 1.35;               // 重采样步长：直接决定曲线段数，也就是体积
 const SIMPLIFY = 0.45;           // 进滤镜前的抽稀：圆/圆弧的密点先合并掉
-const PREC = 1;                  // 坐标小数位
+const PREC = 2;                  // 坐标小数位 —— 1 位在 0.45 长的越位段上会把切线量化歪，
+                                 // 折出半径 0.1 的假弯，Figma 这类「描边转轮廓再填充」的渲染器就缺角
 
 export type RenderPath = { d: string; f?: boolean; w?: number };
 export type GlyphItems = Record<string, GeoElement[]>;

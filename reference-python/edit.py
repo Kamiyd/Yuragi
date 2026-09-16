@@ -537,8 +537,13 @@ class Handler(BaseHTTPRequestHandler):
             built_index = os.path.join(WEB_DIST, "index.html")
             if os.path.isfile(built_index):
                 return self._send_file(built_index)
-            html = io.open(os.path.join(HERE, "editor.html"), encoding="utf-8").read()
-            return self._send(200, html, "text/html; charset=utf-8")
+            # web/dist 是跟着仓库走的交付物，正常不会缺。缺了就明说怎么补，
+            # 不要悄悄退回一个别的界面 —— 那种回退没人跑，早晚烂掉。
+            return self._send(500, "<meta charset=utf-8><body style=\"font:14px -apple-system;"
+                              "padding:40px;line-height:1.7\"><b>找不到 web/dist。</b><br>"
+                              "这份构建产物本该跟着仓库走。重新出一份：<br><br>"
+                              "<code>cd web &amp;&amp; npm install &amp;&amp; npm run build</code>",
+                              "text/html; charset=utf-8")
         if os.path.isdir(WEB_DIST):
             candidate = os.path.realpath(os.path.join(WEB_DIST, route.lstrip("/")))
             if os.path.commonpath((WEB_DIST, candidate)) == WEB_DIST and os.path.isfile(candidate):

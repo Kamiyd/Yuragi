@@ -638,12 +638,12 @@ export type StrokeStyle = {
   roundedRatio: number;
 };
 
-/** 语料太少时的底子：数值取自中文库 han-sample.json 的 178 笔统计。 */
+/** 没有足够样本时使用中性基线，不依赖任何内置或测试字库。 */
 export const BASE_STYLE: StrokeStyle = {
-  hengTilt: -0.15,
-  shuTilt: 0.1,
+  hengTilt: 0,
+  shuTilt: 0,
   cornerRadius: 2.5,
-  roundedRatio: 0.38,
+  roundedRatio: 0.35,
 };
 
 type StyleAccumulator = {

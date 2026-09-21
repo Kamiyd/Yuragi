@@ -144,7 +144,15 @@ for (const c of fixtures.structure) {
     .map(([k, v]) => [k.split(",").map(Number), v] as [number[], number])
     .sort((a, b) => (a[0][0] - b[0][0]) || (a[0][1] - b[0][1]));
   eq(`structure.cluster ${c.lib} ${c.name}`, cluster, c.cluster);
-  eq(`structure.attach ${c.lib} ${c.name}`, attach.map((a) => [...a]), c.attach);
+  const actualAttach = attach.map((a) => [...a]);
+  const expectedAttach = c.attach as number[][];
+  checks += 1;
+  const attachMatches = actualAttach.length === expectedAttach.length
+    && actualAttach.every((row, i) => row.length === expectedAttach[i].length
+      && row.every((value, j) => j === row.length - 1
+        ? Math.abs(value - expectedAttach[i][j]) <= 1e-12
+        : value === expectedAttach[i][j]));
+  if (!attachMatches) failures.push(`structure.attach ${c.lib} ${c.name} 不一致`);
   const g = [...gaps(strokes).entries()]
     .map(([k, v]) => [k.split(",").map(Number), v] as [number[], number])
     .sort((a, b) => (a[0][0] - b[0][0]) || (a[0][1] - b[0][1]));

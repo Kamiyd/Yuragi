@@ -66,7 +66,7 @@ button { color: inherit; }
   position: fixed;
   inset: 0;
   overflow: hidden;
-  --save-toast-row-offset: 130px;
+  --save-toast-row-offset: 118px;
   /* 极淡的点阵，给画布一点纸面质感 —— 面板和画框是白的，点子只在底噪层 */
   background:
     radial-gradient(circle at 1px 1px, #dedcd4 1px, transparent 0) 0 0 / 26px 26px,
@@ -101,16 +101,33 @@ button { color: inherit; }
 }
 .viewport::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
-.canvas-col { --canvas-inset: 16px; position: relative; display: flex; flex-direction: column; align-items: center; }
+.canvas-col { --canvas-inset: 8px; position: relative; display: flex; flex-direction: column; align-items: center; }
 .canvas-zoom-stage { position: relative; flex: none; }
 
 .canvas-wrap {
   position: relative;
   aspect-ratio: 1;
   width: 480px;
-  background: var(--paper);
+  background-color: var(--paper);
+  background-image: none;
   outline: 1px solid var(--line);
-  border-radius: 2px;
+  border-radius: 14px;
+}
+.canvas-wrap.has-grid {
+  background-color: #fdfcf8;
+  background-image:
+    linear-gradient(rgb(96 112 138 / 5%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(96 112 138 / 5%) 1px, transparent 1px),
+    linear-gradient(rgb(96 112 138 / 2.4%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(96 112 138 / 2.4%) 1px, transparent 1px);
+  background-position: 50% 50%;
+  background-size: 140px 140px, 140px 140px, 28px 28px, 28px 28px;
+  border: 1px solid rgb(0 0 0 / 8%);
+  outline: 0;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 90%),
+    inset 0 0 60px rgb(120 104 72 / 4%),
+    0 1px 2px rgb(0 0 0 / 3%);
 }
 .canvas-wrap.is-reference-locked {
   cursor: not-allowed;
@@ -160,9 +177,6 @@ button { color: inherit; }
   touch-action: none;
 }
 
-.canvas-grid path { fill: none; stroke: #efeeea; stroke-width: .06; }
-.canvas-grid path.major { stroke: #e3e1da; stroke-width: .08; }
-.canvas-tick { fill: #c4c4bf; font: 1.15px var(--font); pointer-events: none; user-select: none; }
 .canvas-face { fill: none; stroke: #c8c4ba; stroke-width: .1; stroke-dasharray: .5 .6; pointer-events: none; }
 .rendered-ink { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; }
 .rendered-ink .filled { fill: currentColor; stroke: none; }
@@ -266,6 +280,38 @@ button { color: inherit; }
 .tools .select-trigger { display: flex; flex: none; width: auto; min-width: 104px; height: 38px; margin: 0 4px 0 0; border-radius: calc(var(--r-card) - 4px); box-shadow: none; background: var(--soft); white-space: nowrap; }
 .tools .select-trigger.reference-font-select { width: 72px; min-width: 72px; margin: 0; padding: 0 8px 0 12px; }
 .select-content.reference-font-content { width: 96px; min-width: 96px; }
+.tools button.copy-svg-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-bottom-color: var(--line-strong);
+  border-radius: calc(var(--r-card) - 4px);
+  background: #fff;
+  color: #09090B;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  cursor: pointer;
+  box-shadow: 0 1px 0 rgb(28 28 24 / 7%);
+  transition: border-color .16s ease, background .16s ease, color .16s ease, transform .16s ease;
+}
+.tools button.copy-svg-button:hover:not(:disabled) { border-color: var(--line-strong); background: var(--soft); }
+.tools button.copy-svg-button:active:not(:disabled) { transform: translateY(1px); box-shadow: none; }
+.tools button.copy-svg-button:disabled {
+  border-color: var(--line);
+  background: #fff;
+  color: #09090B;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: .55;
+}
+.tools button.copy-svg-button svg { width: 17px; height: 17px; }
 .save-action { display: flex; flex: none; }
 .save-toast {
   position: fixed;
@@ -1584,6 +1630,335 @@ button { color: inherit; }
 .showcase-note { margin: -22px 0 0; color: var(--muted); font: 11.5px var(--font); font-variant-numeric: tabular-nums; }
 .showcase-note.is-error { color: var(--danger); font-family: var(--font); }
 
+/* ── 移动端：工作区保留画布，面板改成抽屉 ──────────────────────────────────
+   桌面端的左右栏适合持续对照；手机上如果把两栏同时缩窄，画布、列表和
+   控件都会失去可用尺寸。因此移动端只保留一块主画布，设置从顶部入口
+   打开为抽屉，抽屉自身滚动，底部预览继续留在工作区里。 */
+.mobile-toolbar,
+.mobile-panel-backdrop { display: none; }
+
+@media (max-width: 767px) {
+  :root {
+    --outer-gutter: 12px;
+    --panel-content-gutter: 12px;
+    --left-panel-content-gutter: 12px;
+  }
+
+  html,
+  body {
+    min-width: 0;
+    width: 100%;
+    height: 100%;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  body { min-width: 0; }
+
+  .app {
+    --save-toast-row-offset: 96px;
+    min-width: 0;
+    width: 100%;
+    height: 100dvh;
+  }
+
+  .mobile-toolbar {
+    position: absolute;
+    inset: 0 0 auto;
+    z-index: 45;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 56px;
+    padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
+    border-bottom: 1px solid rgb(222 219 211 / 72%);
+    background: rgb(239 238 234 / 92%);
+    backdrop-filter: blur(14px);
+  }
+
+  .mobile-panel-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    min-width: 70px;
+    height: 36px;
+    padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgb(255 255 255 / 84%);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 650;
+    white-space: nowrap;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgb(28 28 24 / 7%);
+    transition: background .16s ease, color .16s ease, border-color .16s ease, transform .16s ease;
+  }
+
+  .mobile-panel-trigger--right { justify-content: flex-end; }
+  .mobile-panel-trigger .panel-glyph { width: 17px; height: 17px; color: var(--faint); }
+  .mobile-panel-trigger.is-active,
+  .mobile-panel-trigger:active {
+    border-color: var(--line-strong);
+    background: var(--soft-strong);
+    color: var(--ink);
+  }
+  .mobile-panel-trigger:active { transform: scale(.97); }
+
+  .mobile-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: var(--ink);
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: -.02em;
+  }
+  .mobile-brand-icon { display: grid; place-items: center; width: 22px; height: 22px; }
+  .mobile-brand-icon .brand-mark { width: 22px; height: 22px; }
+
+  .mobile-panel-backdrop {
+    position: absolute;
+    z-index: 24;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: rgb(27 27 25 / 13%);
+    cursor: pointer;
+    backdrop-filter: blur(1px);
+  }
+
+  .workspace {
+    left: 0;
+    right: 0;
+    width: 100%;
+    transition: none;
+  }
+
+  .viewport {
+    padding: calc(76px + env(safe-area-inset-top)) 12px 20px;
+    overscroll-behavior: none;
+  }
+
+  .canvas-col { width: 100%; }
+  .canvas-zoom-stage { max-width: 100%; }
+  .canvas-sheet {
+    --canvas-inset: 8px;
+    max-width: 100%;
+    padding: 8px;
+    border-radius: 18px;
+  }
+  .canvas-wrap { max-width: 100%; }
+  .canvas-selection--outside { top: -21px; right: 12px; }
+
+  /* 三个视图开关一行，输入、字体和保存一行，保存不会被挤到屏幕外。 */
+  .tools {
+    display: grid;
+    grid-template-columns: 38px 38px minmax(72px, 1fr) 38px minmax(56px, auto);
+    grid-template-rows: 38px 38px;
+    gap: 2px;
+    width: min(100%, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    min-height: 80px;
+    margin-top: 12px;
+    padding: 4px;
+    border-radius: 18px;
+  }
+  .tools > .tool-toggle { width: 38px; height: 38px; grid-row: 1; }
+  .tools > .tool-toggle:nth-child(1) { grid-column: 1; }
+  .tools > .tool-toggle:nth-child(2) { grid-column: 2; }
+  .tools > .tool-toggle:nth-child(3) { grid-column: 3; }
+  .tools > .sep { display: none; }
+  .tools > .write-content {
+    grid-column: 1 / span 2;
+    grid-row: 2;
+    width: auto;
+    min-width: 0;
+    height: 38px;
+  }
+  .tools > .write-content input {
+    width: 100%;
+    min-width: 0;
+    height: 30px;
+  }
+  .tools > .write-content.is-reference-required { width: auto; }
+  .tools .select-trigger.reference-font-select {
+    grid-column: 3;
+    grid-row: 2;
+    width: auto;
+    min-width: 0;
+    height: 38px;
+    margin: 0;
+    padding: 0 7px 0 9px;
+  }
+  .tools > .copy-svg-button {
+    grid-column: 4;
+    grid-row: 2;
+    width: 100%;
+    min-width: 0;
+    height: 38px;
+    padding: 0;
+  }
+  .tools > .copy-svg-button svg { width: 17px; height: 17px; }
+  .tools > .save-action {
+    grid-column: 5;
+    grid-row: 2;
+    width: 100%;
+    min-width: 0;
+  }
+  .tools > .save-action .save-button {
+    width: 100%;
+    min-width: 0;
+    height: 38px;
+    padding-inline: 8px;
+  }
+
+  .hud-top {
+    top: calc(62px + env(safe-area-inset-top));
+    left: 0;
+    right: 0;
+    padding-inline: 12px;
+  }
+  .preview-control-wrap { width: 76px; height: 40px; }
+  .preview-control-wrap .icon-button--square { --preview-control-size: 30px; }
+
+  .rowbar {
+    margin: 0 12px calc(12px + env(safe-area-inset-bottom));
+    padding: 4px 10px 10px 12px;
+    min-height: 96px;
+    max-height: min(34dvh, 248px);
+    border-radius: 20px;
+  }
+  .preview-resize-handle { right: 12px; left: 12px; }
+  .preview-resize-handle::before { opacity: .9; }
+  .rowbar-head { min-height: 28px; }
+  .rowbar-art {
+    min-height: 52px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .rowbar-art::-webkit-scrollbar { display: none; }
+  .rowbar-svg { margin-inline: auto; }
+
+  .metrics-panel {
+    right: -2px;
+    width: min(340px, calc(100vw - 24px));
+    max-height: min(60dvh, 440px);
+    padding: 12px 10px;
+  }
+  .metrics-table th, .metrics-table td { padding: 7px 6px; }
+  .metrics-note { margin-inline: 6px; }
+
+  .zoom-controls--corner {
+    right: calc(var(--outer-gutter) + 26px + 8px);
+    bottom: var(--outer-gutter);
+    padding: 3px;
+  }
+  .zoom-controls .icon-button { width: 30px; height: 30px; border-radius: 8px; }
+  .zoom-controls .icon-button svg { width: 13px; height: 13px; }
+  .zoom-controls .zoom-readout { min-width: 44px; height: 30px; border-radius: 8px; }
+  .help-button { right: var(--outer-gutter); bottom: var(--outer-gutter); width: 34px; height: 34px; }
+  .help-pop {
+    right: var(--outer-gutter);
+    bottom: calc(var(--outer-gutter) + 34px + 8px);
+    width: min(340px, calc(100vw - 24px));
+    max-height: min(70dvh, calc(100dvh - 112px));
+    overflow-y: auto;
+    padding: 16px;
+    font-size: 12px;
+  }
+
+  /* 抽屉入口始终在顶部，内容区留出状态栏高度；两栏不会再同时露在画布上。 */
+  .panel {
+    top: calc(64px + env(safe-area-inset-top));
+    right: auto;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    width: min(360px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    border-radius: 20px;
+    box-shadow: var(--shadow-pop);
+    transition: transform .22s cubic-bezier(.32, .72, 0, 1), opacity .18s ease;
+  }
+  .panel--left { left: 12px; }
+  .panel--right { left: auto; right: 12px; }
+  .panel[data-mobile-open="false"] {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(12px) scale(.985);
+  }
+  .panel[data-mobile-open="true"] {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
+  .panel-stub { display: none; }
+  .panel-head { padding: 16px 12px 10px 16px; }
+  .panel-head > .icon-button--square { top: 0; width: 36px; height: 36px; }
+  .panel-head h1, .panel-head h2 { top: 0; font-size: 15px; }
+  .panel--right .panel-scroll { padding-bottom: 28px; }
+  .panel .section-trigger {
+    width: 100%;
+    min-height: 38px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .panel--left .section-trigger { padding-left: 16px; }
+  .section-trigger--action { padding-right: 12px; padding-left: 16px; }
+  .section-trigger-action { width: 32px; height: 32px; }
+  .section-body { padding-top: 10px; padding-bottom: 4px; }
+  .panel--right .section-body { padding-right: 12px; }
+  .panel--left .section--library .section-body { padding-top: 10px; }
+
+  .library-mode-card { height: 64px; border-radius: 13px; }
+  .library-mode-card-icon { min-height: 30px; }
+  .drawing-action { height: 42px; min-height: 42px; padding-inline: 8px; }
+  .drawing-action-icon { width: 30px; height: 30px; }
+  .glyph-list { padding-right: 6px; padding-bottom: 16px; }
+  .glyph-row { min-height: 40px; }
+  .glyph-select { min-height: 40px; padding-top: 5px; padding-bottom: 5px; }
+  .thumb-wrap { width: 30px; height: 30px; }
+  .row-menu { width: 34px; height: 36px; margin-right: 4px; opacity: 1; }
+  .color-field,
+  .draggable-input,
+  .switch-row,
+  .select-trigger.export-select,
+  .export-action,
+  .library-file-action--download { min-height: 40px; height: 40px; }
+  .draggable-input__label { padding-top: 11px; padding-bottom: 11px; }
+  .draggable-input__range { touch-action: pan-y; }
+  .switch-button { width: 44px; height: 34px; }
+  .switch-track { width: 30px; height: 18px; }
+  .switch-track span { width: 12px; height: 12px; }
+  .switch-button[data-checked="true"] .switch-track span { transform: translateX(12px); }
+
+  .batch-add-content {
+    top: 50%;
+    width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+    padding: 18px;
+    border-radius: 20px;
+  }
+  .batch-add-textarea { min-height: 88px; max-height: 132px; font-size: 12px; }
+  .batch-add-actions { margin-top: 16px; }
+  .batch-add-cancel, .batch-add-submit { min-width: 76px; height: 40px; }
+
+  .showcase { width: 100%; gap: 24px; padding: 24px 16px calc(24px + env(safe-area-inset-bottom)); }
+  .showcase-paper { width: min(92vw, calc(62dvh * var(--showcase-ratio))); max-width: 100%; }
+  .showcase-bar { justify-content: center; flex-wrap: wrap; gap: 8px; opacity: 1; }
+  .showcase-action { height: 38px; padding-inline: 13px; }
+  .showcase-speeds button { height: 32px; padding-inline: 10px; }
+  .showcase-note { margin-top: -8px; text-align: center; }
+
+  .loading-screen { height: 100dvh; }
+}
+
 /* 字库文件：选一份、导入一份、把当前这份带走。
    几何 JSON 仍然是唯一的真相层 —— 这里只是换了个存它的地方。 */
 .library-file { display: grid; gap: 8px; margin: 0 var(--left-panel-content-gutter) 6px; }
@@ -1707,3 +2082,10 @@ button { color: inherit; }
 
 /* 导出 / 数据分组里的文件操作按钮 */
 .export-file-row { display: flex; gap: 6px; margin-top: 0; }
+
+/* 这些基础规则位于移动端抽屉规则之后，移动端的触控尺寸在文件末尾再锁一次。 */
+@media (max-width: 767px) {
+  .library-mode-card { height: 64px; }
+  .library-mode-card-icon { min-height: 30px; }
+  .library-file-action--download { min-height: 40px; height: 40px; }
+}

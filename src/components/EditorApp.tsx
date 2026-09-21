@@ -154,10 +154,12 @@ type ShortcutKeyProps = {
 
 function ShortcutKey({ label, icon, iconOnly = false }: ShortcutKeyProps) {
   return (
-    <kbd className={`shortcut-key${iconOnly ? " shortcut-key--icon" : ""}`} aria-label={label} title={label}>
-      {icon && <span className="shortcut-key-icon" aria-hidden="true">{icon}</span>}
-      {!iconOnly && <span>{label}</span>}
-    </kbd>
+    <TooltipHint label={label}>
+      <kbd className={`shortcut-key${iconOnly ? " shortcut-key--icon" : ""}`} aria-label={label}>
+        {icon && <span className="shortcut-key-icon" aria-hidden="true">{icon}</span>}
+        {!iconOnly && <span>{label}</span>}
+      </kbd>
+    </TooltipHint>
   );
 }
 
@@ -176,6 +178,26 @@ type IconButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   tooltipLabel?: React.ReactNode;
   children: React.ReactNode;
 };
+
+type TooltipHintProps = {
+  label: React.ReactNode;
+  children: React.ReactElement;
+};
+
+function TooltipHint({ label, children }: TooltipHintProps) {
+  if (label == null || label === "") return children;
+  return (
+    <Tooltip.Root>
+      <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
+      <Tooltip.Portal>
+        <Tooltip.Content className="tooltip-content" sideOffset={8}>
+          {label}
+          <Tooltip.Arrow className="tooltip-arrow" />
+        </Tooltip.Content>
+      </Tooltip.Portal>
+    </Tooltip.Root>
+  );
+}
 
 const PANEL_STORAGE_KEY = "hg-panels";
 const COLOR_STORAGE_KEY = "hg-glyph-ink";
@@ -468,6 +490,25 @@ function downloadBlob(blob: Blob, filename: string) {
   link.click();
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+async function copyTextToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const input = document.createElement("textarea");
+  input.value = text;
+  input.setAttribute("readonly", "");
+  input.style.position = "fixed";
+  input.style.top = "-9999px";
+  input.style.opacity = "0";
+  document.body.appendChild(input);
+  input.select();
+  const legacyDocument = document as unknown as { execCommand?: (command: string) => boolean };
+  const copied = legacyDocument.execCommand?.("copy") ?? false;
+  input.remove();
+  if (!copied) throw new Error("当前浏览器不允许访问剪贴板");
 }
 
 function addSvgSize(svg: string, width: number, height: number, color = DEFAULT_INK_COLOR, opacity = DEFAULT_INK_OPACITY) {
@@ -898,7 +939,7 @@ function glyphExportSvg(paths: RenderPath[], group: GlyphLibrary, scale: number,
   };
 }
 
-async function renderExportGlyph(group: GlyphLibrary, name: string, glyphIndex: number, format: ExportFormat, scale: number, color = DEFAULT_INK_COLOR, opacity = DEFAULT_INK_OPACITY) {
+async function renderExportGlyphMarkup(group: GlyphLibrary, name: string, glyphIndex: number, scale: number, color = DEFAULT_INK_COLOR, opacity = DEFAULT_INK_OPACITY) {
   const paths = (await requestJSON<{ paths: RenderPath[] }>("/api/render", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -911,8 +952,12 @@ async function renderExportGlyph(group: GlyphLibrary, name: string, glyphIndex: 
       localSeed: group.glyphSeeds[name] ?? null,
     }),
   })).paths || [];
+  return glyphExportSvg(paths, group, scale, color, opacity);
+}
+
+async function renderExportGlyph(group: GlyphLibrary, name: string, glyphIndex: number, format: ExportFormat, scale: number, color = DEFAULT_INK_COLOR, opacity = DEFAULT_INK_OPACITY) {
   // 单字 SVG 复用整段导出的「根 Frame + 字形 Group」层级；PNG 仍保留逐笔线重。
-  const rendered = glyphExportSvg(paths, group, scale, color, opacity);
+  const rendered = await renderExportGlyphMarkup(group, name, glyphIndex, scale, color, opacity);
   if (format === "svg") return UTF8.encode(rendered.svg);
   const width = Math.max(1, Math.round(rendered.bounds.width * scale));
   const height = Math.max(1, Math.round(rendered.bounds.height * scale));
@@ -1283,19 +1328,11 @@ function MetricsIcon() {
 
 function IconButton({ label, tooltipLabel = label, children, className = "", ...props }: IconButtonProps) {
   return (
-    <Tooltip.Root>
-      <Tooltip.Trigger asChild>
-        <button {...props} className={`icon-button ${className}`} aria-label={label}>
-          {children}
-        </button>
-      </Tooltip.Trigger>
-      <Tooltip.Portal>
-        <Tooltip.Content className="tooltip-content" sideOffset={8}>
-          {tooltipLabel}
-          <Tooltip.Arrow className="tooltip-arrow" />
-        </Tooltip.Content>
-      </Tooltip.Portal>
-    </Tooltip.Root>
+    <TooltipHint label={tooltipLabel}>
+      <button {...props} className={`icon-button ${className}`} aria-label={label}>
+        {children}
+      </button>
+    </TooltipHint>
   );
 }
 
@@ -1366,17 +1403,18 @@ function Section({
             <span className="section-chevron" aria-hidden="true"><ChevronRightIcon className="pika-ui-icon" /></span>
             {aside && <span className="section-aside">{aside}</span>}
           </Collapsible.Trigger>
-          <button
-            className="section-trigger-action"
-            type="button"
-            aria-label={indicatorLabel || (open ? `添加${title}项` : `展开${title}`)}
-            aria-haspopup={indicatorHasMenu ? "menu" : undefined}
-            title={indicatorLabel || (open ? `添加${title}项` : `展开${title}`)}
-            onClick={(event) => indicatorAction(open, event)}
-            onDoubleClick={(event) => indicatorDoubleAction?.(open, event)}
-          >
-            {indicator}
-          </button>
+          <TooltipHint label={indicatorLabel || (open ? `添加${title}项` : `展开${title}`)}>
+            <button
+              className="section-trigger-action"
+              type="button"
+              aria-label={indicatorLabel || (open ? `添加${title}项` : `展开${title}`)}
+              aria-haspopup={indicatorHasMenu ? "menu" : undefined}
+              onClick={(event) => indicatorAction(open, event)}
+              onDoubleClick={(event) => indicatorDoubleAction?.(open, event)}
+            >
+              {indicator}
+            </button>
+          </TooltipHint>
         </div>
       ) : (
         <Collapsible.Trigger className="section-trigger">
@@ -1503,15 +1541,16 @@ function InkColorField({
 
   return (
     <div className="color-field">
-      <button
-        className="color-swatch-trigger"
-        type="button"
-        aria-label={`选择文字颜色 ${color}`}
-        title="选择文字颜色"
-        onClick={() => nativeInputRef.current?.click()}
-      >
-        <span className="color-swatch" style={{ backgroundColor: color }} aria-hidden="true" />
-      </button>
+      <TooltipHint label="选择文字颜色">
+        <button
+          className="color-swatch-trigger"
+          type="button"
+          aria-label={`选择文字颜色 ${color}`}
+          onClick={() => nativeInputRef.current?.click()}
+        >
+          <span className="color-swatch" style={{ backgroundColor: color }} aria-hidden="true" />
+        </button>
+      </TooltipHint>
       <input
         className="color-hex-input"
         type="text"
@@ -1528,34 +1567,36 @@ function InkColorField({
           if (event.key === "Enter") event.currentTarget.blur();
         }}
       />
-      <label className={`color-opacity${opacityScrubbing ? " is-scrubbing" : ""}`} title="文字不透明度">
-        <input
-          type="number"
-          min="0"
-          max="100"
-          step="1"
-          value={opacityText}
-          aria-label="文字不透明度"
-          onChange={(event) => {
-            setOpacityText(event.currentTarget.value);
-            if (event.currentTarget.value !== "") commitOpacity(event.currentTarget.value);
-          }}
-          onBlur={(event) => commitOpacity(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") event.currentTarget.blur();
-          }}
-        />
-        <span
-          className="color-opacity-scrub"
-          aria-hidden="true"
-          onPointerDown={beginOpacityScrub}
-          onPointerMove={updateOpacityScrub}
-          onPointerUp={endOpacityScrub}
-          onPointerCancel={endOpacityScrub}
-        >
-          %
-        </span>
-      </label>
+      <TooltipHint label="文字不透明度">
+        <label className={`color-opacity${opacityScrubbing ? " is-scrubbing" : ""}`}>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            step="1"
+            value={opacityText}
+            aria-label="文字不透明度"
+            onChange={(event) => {
+              setOpacityText(event.currentTarget.value);
+              if (event.currentTarget.value !== "") commitOpacity(event.currentTarget.value);
+            }}
+            onBlur={(event) => commitOpacity(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+            }}
+          />
+          <span
+            className="color-opacity-scrub"
+            aria-hidden="true"
+            onPointerDown={beginOpacityScrub}
+            onPointerMove={updateOpacityScrub}
+            onPointerUp={endOpacityScrub}
+            onPointerCancel={endOpacityScrub}
+          >
+            %
+          </span>
+        </label>
+      </TooltipHint>
       <input
         ref={nativeInputRef}
         className="color-native-input"
@@ -1612,29 +1653,6 @@ function GlyphThumbnail({
 
 const MemoGlyphThumbnail = React.memo(GlyphThumbnail);
 
-function CanvasGrid({ vb }: { vb: number }) {
-  const lines = Array.from({ length: Math.floor(vb / 4) + 1 }, (_, index) => index * 4);
-  return (
-    <g className="canvas-grid">
-      {lines.map((line) => {
-        const major = line % 8 === 0;
-        return (
-          <React.Fragment key={line}>
-            <path className={major ? "major" : undefined} d={`M${line} 0V${vb}`} />
-            <path className={major ? "major" : undefined} d={`M0 ${line}H${vb}`} />
-            {major && line > 0 && (
-              <>
-                <text className="canvas-tick" x={line + 0.3} y={1.6}>{line}</text>
-                <text className="canvas-tick" x={0.3} y={line - 0.3}>{line}</text>
-              </>
-            )}
-          </React.Fragment>
-        );
-      })}
-    </g>
-  );
-}
-
 /** 字面框：所有骨架点的包围盒，用来看这个字在格子里站得正不正。 */
 function faceBox(items: EditableElement[]): [number, number, number, number] | null {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -1657,7 +1675,6 @@ function CanvasArtwork({
   inkColor,
   inkOpacity,
   isPlaying,
-  showGrid,
   showSkeleton,
   canvasLocked,
   drawMode,
@@ -1681,7 +1698,6 @@ function CanvasArtwork({
   inkColor: string;
   inkOpacity: number;
   isPlaying: boolean;
-  showGrid: boolean;
   showSkeleton: boolean;
   canvasLocked: boolean;
   drawMode: boolean;
@@ -1721,7 +1737,6 @@ function CanvasArtwork({
       onLostPointerCapture={onTracePointerCancel}
     >
       <defs dangerouslySetInnerHTML={CANVAS_BOIL_HTML} />
-      {showGrid && <CanvasGrid vb={group.vb} />}
       {face && showSkeleton && (
         <rect className="canvas-face" x={face[0]} y={face[1]} width={face[2] - face[0]} height={face[3] - face[1]} />
       )}
@@ -1831,7 +1846,6 @@ const MemoCanvasArtwork = React.memo(CanvasArtwork, (previous, next) => (
   && previous.inkColor === next.inkColor
   && previous.inkOpacity === next.inkOpacity
   && previous.isPlaying === next.isPlaying
-  && previous.showGrid === next.showGrid
   && previous.showSkeleton === next.showSkeleton
   && previous.canvasLocked === next.canvasLocked
   && previous.drawMode === next.drawMode
@@ -1857,19 +1871,11 @@ function ToolButton({
   children: React.ReactNode;
 }) {
   return (
-      <Tooltip.Root>
-      <Tooltip.Trigger asChild>
-        <button className={`tool-toggle${active ? " on" : ""}`} onClick={onClick} aria-label={label} aria-pressed={active}>
-          {children}
-        </button>
-      </Tooltip.Trigger>
-      <Tooltip.Portal>
-        <Tooltip.Content className="tooltip-content" sideOffset={8}>
-          {label}
-          <Tooltip.Arrow className="tooltip-arrow" />
-        </Tooltip.Content>
-      </Tooltip.Portal>
-    </Tooltip.Root>
+    <TooltipHint label={label}>
+      <button className={`tool-toggle${active ? " on" : ""}`} onClick={onClick} aria-label={label} aria-pressed={active}>
+        {children}
+      </button>
+    </TooltipHint>
   );
 }
 
@@ -1986,6 +1992,10 @@ export default function EditorApp() {
   const [viewportWidth, setViewportWidth] = React.useState(760);
   const [leftOpen, setLeftOpen] = React.useState(true);
   const [rightOpen, setRightOpen] = React.useState(true);
+  const [mobilePanel, setMobilePanel] = React.useState<"left" | "right" | null>(null);
+  const [isMobile, setIsMobile] = React.useState(() => (
+    typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches
+  ));
   const [openSections, setOpenSections] = React.useState<Record<string, boolean>>({
     library: true,
     layout: true,
@@ -2006,7 +2016,8 @@ export default function EditorApp() {
   const [exportScale, setExportScale] = React.useState<string>("1");
   const [exportBusy, setExportBusy] = React.useState(false);
   const [exportMessage, setExportMessage] = React.useState("");
-  const [saveToastOpen, setSaveToastOpen] = React.useState(false);
+  const [toastMessage, setToastMessage] = React.useState("");
+  const [copySvgBusy, setCopySvgBusy] = React.useState(false);
   const svgRef = React.useRef<SVGSVGElement | null>(null);
   const viewportRef = React.useRef<HTMLDivElement | null>(null);
   const helpRef = React.useRef<HTMLDivElement | null>(null);
@@ -3009,6 +3020,14 @@ export default function EditorApp() {
   }, []);
 
   React.useEffect(() => {
+    const media = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobile(media.matches);
+    update();
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, []);
+
+  React.useEffect(() => {
     const element = viewportRef.current;
     if (!element) return;
     const observer = new ResizeObserver(([entry]) => {
@@ -3198,14 +3217,16 @@ export default function EditorApp() {
     }
   };
 
-  const showSaveToast = React.useCallback(() => {
+  const showToast = React.useCallback((message: string) => {
     if (saveToastTimerRef.current !== null) window.clearTimeout(saveToastTimerRef.current);
-    setSaveToastOpen(true);
+    setToastMessage(message);
     saveToastTimerRef.current = window.setTimeout(() => {
       saveToastTimerRef.current = null;
-      setSaveToastOpen(false);
+      setToastMessage("");
     }, 1400);
   }, []);
+
+  const showSaveToast = React.useCallback(() => showToast("已保存"), [showToast]);
 
   React.useEffect(() => () => {
     if (saveToastTimerRef.current !== null) window.clearTimeout(saveToastTimerRef.current);
@@ -3428,6 +3449,28 @@ export default function EditorApp() {
       window.removeEventListener("keydown", handleShortcut);
     };
   }, [geo, drawMode, traceMode, referenceNeedsEntry, glyphName, restore, selectedStrokes, selectedPoint, showSaveToast]);
+
+  const copyCurrentSvg = async () => {
+    if (!group || !selectedExportGlyph || !group.items[selectedExportGlyph]?.length || copySvgBusy) return;
+    setCopySvgBusy(true);
+    try {
+      const style = inkStyleFor(selectedExportGlyph);
+      const rendered = await renderExportGlyphMarkup(
+        group,
+        selectedExportGlyph,
+        names.indexOf(selectedExportGlyph),
+        1,
+        style.color,
+        style.opacity,
+      );
+      await copyTextToClipboard(rendered.svg);
+      showToast("SVG 已复制");
+    } catch (reason) {
+      setError(`复制 SVG 失败：${reason instanceof Error ? reason.message : String(reason)}`);
+    } finally {
+      setCopySvgBusy(false);
+    }
+  };
 
   const exportContent = async () => {
     const exportNames = names.filter((name) => !isDraftGlyph(name));
@@ -4015,13 +4058,34 @@ export default function EditorApp() {
 
   const canvasBase = Math.max(208, Math.min(480, viewportHeight - 160, viewportWidth - 32));
   const canvasPx = Math.round(canvasBase);
-  const canvasFramePx = canvasPx + 32;
+  const canvasFramePx = canvasPx + 16;
 
 
   const railStyle = {
     "--rail-l": leftOpen ? "288px" : "112px",
     "--rail-r": rightOpen ? "304px" : "112px",
   } as React.CSSProperties;
+
+  const toggleMobilePanel = (side: "left" | "right") => {
+    setMobilePanel((current) => current === side ? null : side);
+  };
+
+  const closeMobilePanel = () => {
+    const closingPanel = mobilePanel;
+    setMobilePanel(null);
+    if (isMobile && closingPanel) {
+      window.requestAnimationFrame(() => {
+        document.getElementById(`mobile-${closingPanel}-panel-trigger`)?.focus();
+      });
+    }
+  };
+
+  const closePanel = (side: "left" | "right") => {
+    closeMobilePanel();
+    if (isMobile) return;
+    if (side === "left") setLeftOpen(false);
+    else setRightOpen(false);
+  };
 
   return (
     <Tooltip.Provider delayDuration={350} skipDelayDuration={120}>
@@ -4033,6 +4097,35 @@ export default function EditorApp() {
         setSelectedStrokes([]);
         setSelectedPoint(null);
       }}>
+        <div className="mobile-toolbar" role="toolbar" aria-label="移动端工作区">
+          <button
+            id="mobile-left-panel-trigger"
+            className={`mobile-panel-trigger${mobilePanel === "left" ? " is-active" : ""}`}
+            type="button"
+            aria-expanded={mobilePanel === "left"}
+            aria-controls="mobile-left-panel"
+            onClick={() => toggleMobilePanel("left")}
+          >
+            <PanelGlyph side="left" />
+            <span>字库</span>
+          </button>
+          <div className="mobile-brand" aria-label="Yuragi 手绘字生成器">
+            <span className="mobile-brand-icon">{YuragiMark}</span>
+            <span>Yuragi</span>
+          </div>
+          <button
+            id="mobile-right-panel-trigger"
+            className={`mobile-panel-trigger mobile-panel-trigger--right${mobilePanel === "right" ? " is-active" : ""}`}
+            type="button"
+            aria-expanded={mobilePanel === "right"}
+            aria-controls="mobile-right-panel"
+            onClick={() => toggleMobilePanel("right")}
+          >
+            <span>编辑</span>
+            <PanelGlyph side="right" />
+          </button>
+        </div>
+
         {/* ── 中间：画布 + 工具条 + 行预览 ──────────────────────────── */}
         <div className="workspace">
           <div className="stage">
@@ -4047,7 +4140,7 @@ export default function EditorApp() {
                     aria-label="字形编辑"
                     style={{ width: canvasFramePx, transform: `scale(${zoom})` }}
                   >
-                    <div className={`canvas-wrap${referenceNeedsEntry ? " is-reference-locked" : ""}`} data-trace-mode={traceMode} style={{ width: canvasPx }}>
+                    <div className={`canvas-wrap${showGrid ? " has-grid" : ""}${referenceNeedsEntry ? " is-reference-locked" : ""}`} data-trace-mode={traceMode} style={{ width: canvasPx }}>
                       {underlay && (
                         <div
                           className="canvas-under"
@@ -4064,7 +4157,6 @@ export default function EditorApp() {
                         inkColor={inkColor}
                         inkOpacity={inkOpacity}
                         isPlaying={previewPlaying}
-                        showGrid={showGrid}
                         showSkeleton={showSkeleton}
                         canvasLocked={referenceNeedsEntry}
                         drawMode={drawMode}
@@ -4135,6 +4227,16 @@ export default function EditorApp() {
                     </Select.Portal>
                   </Select.Root>
                   <span className="sep tools-save-sep" aria-hidden="true" />
+                  <IconButton
+                    className="copy-svg-button"
+                    type="button"
+                    label={copySvgBusy ? "正在复制 SVG" : "复制当前字形 SVG"}
+                    tooltipLabel={copySvgBusy ? "正在复制 SVG" : "复制当前字形 SVG"}
+                    disabled={copySvgBusy || referenceNeedsEntry || !selectedExportGlyph || !group?.items[selectedExportGlyph]?.length}
+                    onClick={() => { void copyCurrentSvg(); }}
+                  >
+                    <CopyIcon className="pika-ui-icon" aria-hidden="true" />
+                  </IconButton>
                   <div className="save-action">
                     <button
                       className="save-button"
@@ -4157,20 +4259,23 @@ export default function EditorApp() {
             <div className="help-anchor" ref={helpRef}>
               <div className="zoom-controls zoom-controls--corner" role="group" aria-label="画布缩放">
                 <IconButton label="缩小（⌘/Ctrl−）" onClick={() => setZoomClamped(zoom / 1.15)}><MinusIcon className="pika-ui-icon" /></IconButton>
-                <button className="zoom-readout" onClick={() => setZoom(1)} title="回到 100%（⌘/Ctrl0）">{Math.round(zoom * 100)}%</button>
+                <TooltipHint label="回到 100%（⌘/Ctrl0）">
+                  <button className="zoom-readout" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
+                </TooltipHint>
                 <IconButton label="放大（⌘/Ctrl+）" onClick={() => setZoomClamped(zoom * 1.15)}><PlusIcon className="pika-ui-icon" /></IconButton>
               </div>
-              <button
-                className="help-button"
-                type="button"
-                data-open={helpOpen}
-                aria-expanded={helpOpen}
-                aria-controls="editor-help"
-                title="快捷键与规矩"
-                onClick={() => setHelpOpen((value) => !value)}
-              >
-                ?
-              </button>
+              <TooltipHint label="快捷键与规矩">
+                <button
+                  className="help-button"
+                  type="button"
+                  data-open={helpOpen}
+                  aria-expanded={helpOpen}
+                  aria-controls="editor-help"
+                  onClick={() => setHelpOpen((value) => !value)}
+                >
+                  ?
+                </button>
+              </TooltipHint>
               {helpOpen && (
                 <div className="help-pop" id="editor-help" role="dialog" aria-label="快捷键与规矩">
                   <b>这是什么</b>
@@ -4272,9 +4377,11 @@ export default function EditorApp() {
               <b>预览</b>
               <span className="spacer" />
               <div className="metrics-anchor" onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setMetricsOpen(false); } }}>
-                <button className="metrics-toggle" type="button" aria-label="逐字数据" title="逐字数据" aria-expanded={metricsOpen} aria-controls="glyph-metrics" onClick={() => setMetricsOpen((open) => !open)}>
-                  <MetricsIcon />
-                </button>
+                <TooltipHint label="逐字数据">
+                  <button className="metrics-toggle" type="button" aria-label="逐字数据" aria-expanded={metricsOpen} aria-controls="glyph-metrics" onClick={() => setMetricsOpen((open) => !open)}>
+                    <MetricsIcon />
+                  </button>
+                </TooltipHint>
                 {metricsOpen && (
                   <section className="metrics-panel" id="glyph-metrics" aria-label="逐字数据">
                     <div className="metrics-panel-head">
@@ -4288,19 +4395,20 @@ export default function EditorApp() {
                           <tr className={cell.thin ? "thin" : undefined} key={`${cell.name}-${index}`}>
                             <th scope="row">{cell.name == null ? "·" : <GlyphLabel name={cell.name} className="metrics-glyph-label" />}</th>
                             <td>{cell.s.toFixed(3)}</td>
-                            <td
-                              className={`metrics-size-delta${cell.sizeAlert ? ` ${cell.sizeAlert}` : ""}`}
-                              title={cell.sizeDelta === null
-                                ? undefined
+                            <TooltipHint
+                              label={cell.sizeDelta === null
+                                ? null
                                 : `${cell.sizeAlert === "large" ? "偏大" : cell.sizeAlert === "small" ? "偏小" : "正常"}，相对本行中位大小 ${cell.sizeDelta >= 0 ? "+" : ""}${cell.sizeDelta.toFixed(1)}%`}
                             >
-                              {cell.sizeDelta === null ? "—" : (
-                                <>
-                                  {cell.sizeAlert && <small>{cell.sizeAlert === "large" ? "偏大" : "偏小"}</small>}
-                                  {cell.sizeDelta >= 0 ? "+" : ""}{cell.sizeDelta.toFixed(1)}%
-                                </>
-                              )}
-                            </td>
+                              <td className={`metrics-size-delta${cell.sizeAlert ? ` ${cell.sizeAlert}` : ""}`}>
+                                {cell.sizeDelta === null ? "—" : (
+                                  <>
+                                    {cell.sizeAlert && <small>{cell.sizeAlert === "large" ? "偏大" : "偏小"}</small>}
+                                    {cell.sizeDelta >= 0 ? "+" : ""}{cell.sizeDelta.toFixed(1)}%
+                                  </>
+                                )}
+                              </td>
+                            </TooltipHint>
                             <td>{cell.diff === null ? "—" : `${cell.diff.toFixed(1)}%`}</td>
                           </tr>
                         ))}</tbody>
@@ -4328,7 +4436,16 @@ export default function EditorApp() {
           </div>
         </div>
 
-        {saveToastOpen && <span className="save-toast" role="status" aria-live="polite">已保存</span>}
+        {isMobile && mobilePanel && (
+          <button
+            className="mobile-panel-backdrop"
+            type="button"
+            aria-label="关闭面板"
+            onClick={closeMobilePanel}
+          />
+        )}
+
+        {toastMessage && <span className="save-toast" role="status" aria-live="polite">{toastMessage}</span>}
         {/* setError 原来只有整页错误屏读得到 —— 字库加载之后报的错全是哑的。
             这条跟「已保存」同一个位置，点一下或者几秒后自己消失。 */}
         {!!error && (
@@ -4364,10 +4481,16 @@ export default function EditorApp() {
         </div>
 
         {/* ── 左面板：字库 ─────────────────────────────────────── */}
-        <aside className="panel panel--left" data-collapsed={!leftOpen} aria-hidden={!leftOpen}>
+        <aside
+          id="mobile-left-panel"
+          className="panel panel--left"
+          data-collapsed={!leftOpen}
+          data-mobile-open={isMobile && mobilePanel === "left"}
+          aria-hidden={isMobile ? mobilePanel !== "left" : !leftOpen}
+        >
           <div className="panel-head">
             <h1>字库</h1>
-            <IconButton label="收起字库（[）" className="icon-button--square" onClick={() => setLeftOpen(false)}><PanelGlyph side="left" /></IconButton>
+            <IconButton label="收起字库（[）" className="icon-button--square" onClick={() => closePanel("left")}><PanelGlyph side="left" /></IconButton>
           </div>
           <Section
             title="新建"
@@ -4526,9 +4649,9 @@ export default function EditorApp() {
 
         <button
           className="panel-stub panel-stub--left"
-          data-hidden={leftOpen}
+          data-hidden={leftOpen || mobilePanel === "left"}
           aria-label="展开字库（[）"
-          tabIndex={leftOpen ? -1 : 0}
+          tabIndex={leftOpen || mobilePanel === "left" ? -1 : 0}
           onClick={() => setLeftOpen(true)}
         >
           <span className="panel-stub-inner">
@@ -4538,10 +4661,16 @@ export default function EditorApp() {
         </button>
 
         {/* ── 右面板：编辑 ─────────────────────────────────────── */}
-        <aside className="panel panel--right" data-collapsed={!rightOpen} aria-hidden={!rightOpen}>
+        <aside
+          id="mobile-right-panel"
+          className="panel panel--right"
+          data-collapsed={!rightOpen}
+          data-mobile-open={isMobile && mobilePanel === "right"}
+          aria-hidden={isMobile ? mobilePanel !== "right" : !rightOpen}
+        >
           <div className="panel-head">
             <h2>编辑</h2>
-            <IconButton label="收起编辑（]）" className="icon-button--square" onClick={() => setRightOpen(false)}><PanelGlyph side="right" /></IconButton>
+            <IconButton label="收起编辑（]）" className="icon-button--square" onClick={() => closePanel("right")}><PanelGlyph side="right" /></IconButton>
           </div>
 
           <div className="panel-scroll">
@@ -4777,9 +4906,9 @@ export default function EditorApp() {
 
         <button
           className="panel-stub panel-stub--right"
-          data-hidden={rightOpen}
+          data-hidden={rightOpen || mobilePanel === "right"}
           aria-label="展开编辑（]）"
-          tabIndex={rightOpen ? -1 : 0}
+          tabIndex={rightOpen || mobilePanel === "right" ? -1 : 0}
           onClick={() => setRightOpen(true)}
         >
           <span className="panel-stub-inner">

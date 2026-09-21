@@ -12,13 +12,13 @@ import { muxMp4, type Mp4Sample } from "./mp4";
 
 export const SHOWCASE_SPEEDS: Array<[string, number]> = [["慢", 0.6], ["常速", 1], ["快", 1.7]];
 
-const MS_PER_UNIT = 4.2;     // 每个网格单位多少毫秒 —— 长横比点慢，就是靠这个
-const MIN_MS = 80;           // 点、短撇再快也要看得见
-const MAX_MS = 520;          // 长捺再慢也别拖成慢镜头
-const FILL_MS = 140;         // 实心块没有弧长，淡入
-const STROKE_GAP = 55;       // 一个字之内，笔与笔之间
-const GLYPH_GAP = 240;       // 字与字之间：抬笔挪位置的那一拍。没有这一拍，
-                             // 一段话看着像一口气连笔写下来的
+export const MS_PER_UNIT = 4.2;     // 每个网格单位多少毫秒 —— 长横比点慢，就是靠这个
+export const MIN_MS = 80;           // 点、短撇再快也要看得见
+export const MAX_MS = 520;          // 长捺再慢也别拖成慢镜头
+const FILL_MS = 140;                // 实心块没有弧长，淡入
+export const STROKE_GAP = 55;       // 一个字之内，笔与笔之间
+export const GLYPH_GAP = 240;       // 字与字之间：抬笔挪位置的那一拍。没有这一拍，
+                                    // 一段话看着像一口气连笔写下来的
 export const SHOWCASE_TAIL_MS = 900;   // 写完停一下 —— 导出的片子要有个收尾
 
 /* 载入动画：铺纸 → 纸纹 → 界格落下 → 润墨 → 起笔。

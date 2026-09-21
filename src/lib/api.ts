@@ -1,35 +1,11 @@
-/* 原来编辑器的每一次渲染都要往 127.0.0.1:8731 上的 Python 跑一趟：
-   浏览器只发骨架点、只收回 path，图就一定跟 handdraw.py 出的是同一条线。
-
-   现在没有那个 Python 了 —— 整条流水线搬进了 src/lib/core，在浏览器里跑。
-   「只有一份实现」这条规矩没变，变的是那份实现的位置：
-   tools/parity 用 Python 生成标准结果核对 4,340 项：路径和 SVG 字符串精确相等，
-   数值结果按 1e-12 容差比较，所以预览和导出仍走同一条线。
-
-   这一层保留了原来的 fetch 接口形状（/api/geo、/api/render、/api/row、/api/save），
-   EditorApp 那边的节流、序号丢弃、缓存键全都不用动 —— 只是请求不再出门。
-
-   **只有一份工作文档。** 不是字库管理器：没有列表、没有切换、没有内置模板库。
-   浏览器里留一个槽位只为了防手滑关标签页；要带走、要回来，走「下载/打开工程文件」。
-   道理很简单 —— 渐变工具的输入是七个数，丢了重拨二十秒；这里的输入是你一笔一笔
-   描出来的骨架，一句话小半小时。参数可以不存，创作的内容不能不存。
-
-   **产品输入是一段文字，但预览会按可用宽度自动换行。** core 里的 writeLines（`/` 断行、
-   多行同一个 viewBox）保留着，它是 handdraw.py write 的镜像、对照测试还在跑；编辑器的
-   行预览则用自己的最大宽度重新排版，保持字号不变。 */
+/* Browser-local API adapter: render through core modules and persist the active
+   project in localStorage. No network request is required. */
 import { loadGeo, serializeGeoFile, type GlyphLibrary } from "./core/library";
 import { render, renderRow } from "./core/render";
 
 export type LayoutMode = "han" | "latin";
 
-/* 新建工程的预设。
-
-   汉字 sw 2.8：44px 下限上两道横留 6 个单位 = 2.2px 白缝，3.4 只剩 1.8px。
-   拉丁 sw 3.2：拉丁字怀在 3.5 上都不糊，所以它不是可读性问题是颜色问题 ——
-     3.2 是三套手调拉丁（3.0 / 3.2 / 3.5，字面高 25–27）的中心值。
-     混排请用汉字的 2.8：拉丁上到 3.4 跟汉字并排会散成两支笔。
-   amp / jit / vary 0.9：row.py 在 1.0 上那组数被 14 张上线标题验过，各收一档
-     给通用场景留余量。详见 reference-python/docs/params.md。 */
+/* Default stroke width for a new document in each layout mode. */
 const PRESETS: Record<LayoutMode, number> = { han: 2.8, latin: 3.2 };
 
 /** 拉丁新字形的起手字宽；画完再拖右栏那根「字宽」滑杆。 */
@@ -100,7 +76,7 @@ type RowRequest = {
   glyphOrder?: string[];
 };
 
-/** 原来那个 fetch 包装的位置换成本地调用；接口形状一模一样。 */
+/** Dispatch editor API calls to local rendering and storage. */
 export async function requestJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const body = init?.body ? JSON.parse(String(init.body)) : {};
   const route = url.split("?")[0];

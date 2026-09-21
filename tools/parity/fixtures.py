@@ -132,7 +132,7 @@ def fixture():
     # 6. 排一行（= /api/row）
     row_cases = []
     texts = {
-        "han-sample.json": ["我和", "我和我", "和和和", "我和你", "我是"],
+        "han-sample.json": ["我和", "我和我", "和和和", "我是", "我和2"],
         "latin-compact.json": ["Hand", "glyphs", "make", "Hand glyph"],
         "latin-round.json": ["Hand", "glyph.", "smack"],
         "han-latin-sample.json": ["我和", "Hand", "手写", "我和 Hand"],
@@ -169,7 +169,7 @@ def fixture():
          "track": 6.5, "ampk": 0.4},
         {"g": glyphs, "lib": "han-sample.json", "text": "我和我", "seed": 3, "mode": "han",
          "track": -3, "amp": 1.6, "over": 0.2, "varyk": 1.8},
-        {"g": glyphs, "lib": "han-sample.json", "text": "我和你", "seed": 3, "mode": "han",
+        {"g": glyphs, "lib": "han-sample.json", "text": "我和", "seed": 3, "mode": "han",
          "glyph_seeds": {"我": 12, "和": 3}},
         {"g": glyphs, "lib": "han-sample.json", "text": "", "seed": 1, "mode": "han"},
         {"g": latin, "lib": "latin-round.json", "text": "Hand glyph.", "seed": 9, "mode": "latin"},
@@ -195,7 +195,7 @@ def fixture():
         glyphs = geo_payload(lib)["glyphs"]
         names = list(glyphs["items"])
         mode = "latin" if lib.startswith("latin") else "han"
-        text = "".join(names[:7])
+        text = "我和我和我和我" if lib == "han-sample.json" else "".join(names[:7])
         for max_width in (90.0, 160.0, 320.0):
             row = edit.render_row(text, 42, glyphs["jit"], mode,
                                   glyphs["amp"], glyphs["over"], True, glyphs["vary"],
@@ -207,7 +207,7 @@ def fixture():
 
     # 7. write（多行、含 / 断行）
     write_cases = []
-    for lib, text in (("han-sample.json", "我和我/我和你"), ("han-sample.json", "我和"),
+    for lib, text in (("han-sample.json", "我和/和我"), ("han-sample.json", "我和"),
                       ("latin-compact.json", "Hand/glyphs")):
         normalized = H.normalize(load_raw(lib))
         raw = dict({p: normalized[p] for p in H.PARAMS},

@@ -20,8 +20,6 @@
 import { loadGeo, serializeGeoFile, type GlyphLibrary } from "./core/library";
 import { render, renderRow } from "./core/render";
 
-import han-sampleText from "../data/han-sample.json?raw";
-
 export type LayoutMode = "han" | "latin";
 
 /* 新建工程的预设。
@@ -37,9 +35,6 @@ const PRESETS: Record<LayoutMode, number> = { han: 2.8, latin: 3.2 };
 /** 拉丁新字形的起手字宽；画完再拖右栏那根「字宽」滑杆。 */
 export const DEFAULT_LATIN_ADV = 30;
 
-/** 第一次打开给的示例 —— 分享出去别人点进来得看见这工具能干什么。 */
-const SAMPLE = { name: "示例文字.json", text: han-sampleText };
-
 export function emptyDocumentText(mode: LayoutMode): string {
   return `${JSON.stringify({ vb: 64, sw: PRESETS[mode], mode, amp: 0.9, jit: 0.9, vary: 0.9, items: {} }, null, 1)}\n`;
 }
@@ -48,15 +43,18 @@ const DOC_KEY = "hg-document";
 
 type Doc = { name: string; text: string };
 
+/** 新访客从空白汉字工程开始；已有浏览器工程仍从本地槽位读取。 */
+const EMPTY_DOCUMENT: Doc = { name: "手写字.json", text: emptyDocumentText("han") };
+
 function readDoc(): Doc {
   try {
     const raw = window.localStorage.getItem(DOC_KEY);
     const parsed = raw ? JSON.parse(raw) : null;
     if (parsed && typeof parsed.text === "string") {
-      return { name: String(parsed.name || SAMPLE.name), text: parsed.text };
+      return { name: String(parsed.name || EMPTY_DOCUMENT.name), text: parsed.text };
     }
-  } catch { /* 读不出来就回示例 */ }
-  return SAMPLE;
+  } catch { /* 读不出来就回空白工程 */ }
+  return EMPTY_DOCUMENT;
 }
 
 function writeDoc(doc: Doc) {

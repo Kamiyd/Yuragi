@@ -1,82 +1,81 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="360" viewBox="0 0 1120 360" role="img" aria-labelledby="title desc">
-  <title id="title">Yuragi 快速上手：画骨架、生成变体、导出 SVG</title>
-  <desc id="desc">用“山”的手绘骨架生成三个不同版本，再导出为 SVG 文件。</desc>
-  <defs>
-    <style>
-      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-      .card { fill: #fff; stroke: #e4e4df; stroke-width: 1.2; }
-      .eyebrow { fill: #73736d; font-size: 12px; font-weight: 650; letter-spacing: 1.4px; }
-      .heading { fill: #20201d; font-size: 22px; font-weight: 650; }
-      .caption { fill: #66665f; font-size: 14px; }
-      .ink { fill: none; stroke: #24241f; stroke-width: 2.8; stroke-linecap: round; stroke-linejoin: round; }
-      .skeleton { fill: none; stroke: #363630; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; }
-      .secondary { fill: none; stroke: #76766f; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
-      .grid { stroke: #ecece7; stroke-width: .7; }
-      .fade-a, .fade-b, .fade-c, .fade-d, .variant-a, .variant-b, .variant-c, .export-card { opacity: 1; }
-      @media (prefers-reduced-motion: no-preference) {
-        .fade-a, .fade-b, .fade-c, .fade-d, .variant-a, .variant-b, .variant-c, .export-card { opacity: 0; animation-duration: 10s; animation-timing-function: cubic-bezier(.23,1,.32,1); animation-iteration-count: infinite; }
-        .fade-a { animation-name: strokeA; }
-        .fade-b { animation-name: strokeB; }
-        .fade-c { animation-name: strokeC; }
-        .fade-d { animation-name: strokeD; }
-        .variant-a { animation-name: variantA; }
-        .variant-b { animation-name: variantB; }
-        .variant-c { animation-name: variantC; }
-        .export-card { animation-name: exportIn; }
-        @keyframes strokeA { 0%, 2% { opacity: 0; } 6%, 72% { opacity: 1; } 86%, 100% { opacity: 0; } }
-        @keyframes strokeB { 0%, 8% { opacity: 0; } 12%, 72% { opacity: 1; } 86%, 100% { opacity: 0; } }
-        @keyframes strokeC { 0%, 14% { opacity: 0; } 18%, 72% { opacity: 1; } 86%, 100% { opacity: 0; } }
-        @keyframes strokeD { 0%, 20% { opacity: 0; } 24%, 72% { opacity: 1; } 86%, 100% { opacity: 0; } }
-        @keyframes variantA { 0%, 31% { opacity: 0; } 36%, 72% { opacity: 1; } 86%, 100% { opacity: 0; } }
-        @keyframes variantB { 0%, 38% { opacity: 0; } 43%, 72% { opacity: 1; } 86%, 100% { opacity: 0; } }
-        @keyframes variantC { 0%, 45% { opacity: 0; } 50%, 72% { opacity: 1; } 86%, 100% { opacity: 0; } }
-        @keyframes exportIn { 0%, 57% { opacity: 0; } 63%, 72% { opacity: 1; } 86%, 100% { opacity: 0; } }
-      }
-    </style>
-  </defs>
-  <rect width="1120" height="360" rx="24" fill="#f5f5f1"/>
-  <rect class="card" x="20" y="20" width="344" height="320" rx="18"/>
-  <rect class="card" x="388" y="20" width="344" height="320" rx="18"/>
-  <rect class="card" x="756" y="20" width="344" height="320" rx="18"/>
-
-  <text class="eyebrow" x="46" y="58">01 / INPUT</text>
-  <text class="heading" x="46" y="91">画出字形骨架</text>
-  <text class="caption" x="46" y="119">一笔一笔描，空白工程从这里开始</text>
-  <g transform="translate(166 142) scale(1.45)">
-    <path class="grid" d="M0 0H64M0 16H64M0 32H64M0 48H64M0 64H64M0 0V64M16 0V64M32 0V64M48 0V64M64 0V64"/>
-    <path class="skeleton fade-a" d="M15 18V48"/>
-    <path class="skeleton fade-b" d="M32 10V50"/>
-    <path class="skeleton fade-c" d="M49 18V48"/>
-    <path class="skeleton fade-d" d="M15 48H49"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="400" viewBox="0 0 1200 400" role="img" aria-labelledby="title desc">
+  <title id="title">Yuragi 快速上手：画骨架、生成变化、导出 SVG</title>
+  <desc id="desc">先画出“天”的字形骨架，再用三个种子生成三种写法，最后导出为 SVG 文件。</desc>
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif; }
+    .card { fill: #fff; stroke: #e6e6e0; stroke-width: 1.2; }
+    .eyebrow { fill: #8a8a82; font-size: 12px; font-weight: 650; letter-spacing: 1.4px; }
+    .heading { fill: #20201d; font-size: 22px; font-weight: 650; }
+    .caption { fill: #6b6b64; font-size: 14px; }
+    .mono { fill: #9a9a92; stroke: none; font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .file { fill: #50504a; font-size: 13px; font-weight: 600; }
+.qs0{stroke-dasharray:38.44 50.44;animation:qs0k 10601ms linear infinite}@keyframes qs0k{0%,0.000%{stroke-dashoffset:44.44;animation-timing-function:cubic-bezier(0.455, 0.03, 0.515, 0.955)}1.426%,100%{stroke-dashoffset:0}}
+.qs1{stroke-dasharray:48.84 60.84;animation:qs1k 10601ms linear infinite}@keyframes qs1k{0%,1.945%{stroke-dashoffset:54.84;animation-timing-function:cubic-bezier(0.455, 0.03, 0.515, 0.955)}3.768%,100%{stroke-dashoffset:0}}
+.qs2{stroke-dasharray:51.68 63.68;animation:qs2k 10601ms linear infinite}@keyframes qs2k{0%,4.286%{stroke-dashoffset:57.68;animation-timing-function:cubic-bezier(0.455, 0.03, 0.515, 0.955)}6.217%,100%{stroke-dashoffset:0}}
+.qs3{stroke-dasharray:35.56 47.56;animation:qs3k 10601ms linear infinite}@keyframes qs3k{0%,6.736%{stroke-dashoffset:41.56;animation-timing-function:cubic-bezier(0.455, 0.03, 0.515, 0.955)}8.052%,100%{stroke-dashoffset:0}}
+.qs4{stroke-dasharray:40.79 52.79;animation:qs4k 10601ms linear infinite}@keyframes qs4k{0%,12.769%{stroke-dashoffset:46.79;animation-timing-function:cubic-bezier(0.455, 0.03, 0.515, 0.955)}14.285%,100%{stroke-dashoffset:0}}
+.qs5{stroke-dasharray:51.18 63.18;animation:qs5k 10601ms linear infinite}@keyframes qs5k{0%,14.804%{stroke-dashoffset:57.18;animation-timing-function:cubic-bezier(0.455, 0.03, 0.515, 0.955)}16.715%,100%{stroke-dashoffset:0}}
+.qs6{stroke-dasharray:54.05 66.05;animation:qs6k 10601ms linear infinite}@keyframes qs6k{0%,17.234%{stroke-dashoffset:60.05;animation-timing-function:cubic-bezier(0.455, 0.03, 0.515, 0.955)}19.255%,100%{stroke-dashoffset:0}}
+.qs7{stroke-dasharray:37.96 49.96;animation:qs7k 10601ms linear infinite}@keyframes qs7k{0%,19.774%{stroke-dashoffset:43.96;animation-timing-function:cubic-bezier(0.455, 0.03, 0.515, 0.955)}21.182%,100%{stroke-dashoffset:0}}
+.qs8{stroke-dasharray:40.79 52.79;animation:qs8k 10601ms linear infinite}@keyframes qs8k{0%,23.446%{stroke-dashoffset:46.79;animation-timing-function:cubic-bezier(0.455, 0.03, 0.515, 0.955)}24.962%,100%{stroke-dashoffset:0}}
+.qs9{stroke-dasharray:51.18 63.18;animation:qs9k 10601ms linear infinite}@keyframes qs9k{0%,25.480%{stroke-dashoffset:57.18;animation-timing-function:cubic-bezier(0.455, 0.03, 0.515, 0.955)}27.392%,100%{stroke-dashoffset:0}}
+.qs10{stroke-dasharray:54.05 66.05;animation:qs10k 10601ms linear infinite}@keyframes qs10k{0%,27.911%{stroke-dashoffset:60.05;animation-timing-function:cubic-bezier(0.455, 0.03, 0.515, 0.955)}29.932%,100%{stroke-dashoffset:0}}
+.qs11{stroke-dasharray:37.96 49.96;animation:qs11k 10601ms linear infinite}@keyframes qs11k{0%,30.451%{stroke-dashoffset:43.96;animation-timing-function:cubic-bezier(0.455, 0.03, 0.515, 0.955)}31.858%,100%{stroke-dashoffset:0}}
+.qs12{stroke-dasharray:40.79 52.79;animation:qs12k 10601ms linear infinite}@keyframes qs12k{0%,34.122%{stroke-dashoffset:46.79;animation-timing-function:cubic-bezier(0.455, 0.03, 0.515, 0.955)}35.638%,100%{stroke-dashoffset:0}}
+.qs13{stroke-dasharray:51.18 63.18;animation:qs13k 10601ms linear infinite}@keyframes qs13k{0%,36.157%{stroke-dashoffset:57.18;animation-timing-function:cubic-bezier(0.455, 0.03, 0.515, 0.955)}38.069%,100%{stroke-dashoffset:0}}
+.qs14{stroke-dasharray:54.05 66.05;animation:qs14k 10601ms linear infinite}@keyframes qs14k{0%,38.587%{stroke-dashoffset:60.05;animation-timing-function:cubic-bezier(0.455, 0.03, 0.515, 0.955)}40.609%,100%{stroke-dashoffset:0}}
+.qs15{stroke-dasharray:37.96 49.96;animation:qs15k 10601ms linear infinite}@keyframes qs15k{0%,41.127%{stroke-dashoffset:43.96;animation-timing-function:cubic-bezier(0.455, 0.03, 0.515, 0.955)}42.535%,100%{stroke-dashoffset:0}}
+.qs16{stroke-dasharray:40.79 52.79;animation:qs16k 10601ms linear infinite}@keyframes qs16k{0%,50.082%{stroke-dashoffset:46.79;animation-timing-function:cubic-bezier(0.455, 0.03, 0.515, 0.955)}51.597%,100%{stroke-dashoffset:0}}
+.qs17{stroke-dasharray:51.18 63.18;animation:qs17k 10601ms linear infinite}@keyframes qs17k{0%,52.116%{stroke-dashoffset:57.18;animation-timing-function:cubic-bezier(0.455, 0.03, 0.515, 0.955)}54.028%,100%{stroke-dashoffset:0}}
+.qs18{stroke-dasharray:54.05 66.05;animation:qs18k 10601ms linear infinite}@keyframes qs18k{0%,54.547%{stroke-dashoffset:60.05;animation-timing-function:cubic-bezier(0.455, 0.03, 0.515, 0.955)}56.568%,100%{stroke-dashoffset:0}}
+.qs19{stroke-dasharray:37.96 49.96;animation:qs19k 10601ms linear infinite}@keyframes qs19k{0%,57.087%{stroke-dashoffset:43.96;animation-timing-function:cubic-bezier(0.455, 0.03, 0.515, 0.955)}58.494%,100%{stroke-dashoffset:0}}
+.qr0{animation:qr0k 10601ms linear infinite}@keyframes qr0k{0%,0.000%{opacity:0;animation-timing-function:ease-out}1.887%,100%{opacity:1}}
+.qr1{animation:qr1k 10601ms linear infinite}@keyframes qr1k{0%,0.294%{opacity:0;animation-timing-function:ease-out}2.181%,100%{opacity:1}}
+.qr2{animation:qr2k 10601ms linear infinite}@keyframes qr2k{0%,1.945%{opacity:0;animation-timing-function:ease-out}3.832%,100%{opacity:1}}
+.qr3{animation:qr3k 10601ms linear infinite}@keyframes qr3k{0%,2.636%{opacity:0;animation-timing-function:ease-out}4.522%,100%{opacity:1}}
+.qr4{animation:qr4k 10601ms linear infinite}@keyframes qr4k{0%,4.286%{opacity:0;animation-timing-function:ease-out}6.173%,100%{opacity:1}}
+.qr5{animation:qr5k 10601ms linear infinite}@keyframes qr5k{0%,5.085%{opacity:0;animation-timing-function:ease-out}6.972%,100%{opacity:1}}
+.qr6{animation:qr6k 10601ms linear infinite}@keyframes qr6k{0%,6.736%{opacity:0;animation-timing-function:ease-out}8.622%,100%{opacity:1}}
+.qr7{animation:qr7k 10601ms linear infinite}@keyframes qr7k{0%,6.920%{opacity:0;animation-timing-function:ease-out}8.807%,100%{opacity:1}}
+.qr8{animation:qr8k 10601ms linear infinite}@keyframes qr8k{0%,47.252%{opacity:0;animation-timing-function:ease-out}50.270%,100%{opacity:1}}
+.qlive{animation:qlivek 10601ms linear infinite}@keyframes qlivek{0%,88.680%{opacity:1}95.283%,100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.qlive,.qlive *{animation:none!important;stroke-dasharray:none!important}}
+  </style>
+  <rect width="1200" height="400" rx="24" fill="#f5f5f1"/>
+  <rect class="card" x="24.00" y="24" width="370.67" height="352" rx="18"/>
+  <text class="eyebrow" x="54.00" y="62">01 / SKELETON</text>
+  <text class="heading" x="54.00" y="94">画出字形骨架</text>
+  <text class="caption" x="54.00" y="121">每一笔是一条中心线，端点可以拖动</text>
+  <rect class="card" x="414.67" y="24" width="370.67" height="352" rx="18"/>
+  <text class="eyebrow" x="444.67" y="62">02 / VARIATION</text>
+  <text class="heading" x="444.67" y="94">同一骨架，写法不同</text>
+  <text class="caption" x="444.67" y="121">换个种子重写一遍，种子不变就能复现</text>
+  <rect class="card" x="805.33" y="24" width="370.67" height="352" rx="18"/>
+  <text class="eyebrow" x="835.33" y="62">03 / EXPORT</text>
+  <text class="heading" x="835.33" y="94">导出为 SVG</text>
+  <text class="caption" x="835.33" y="121">每一笔仍是可编辑的矢量路径</text>
+  <rect x="119.33" y="159.00" width="180" height="180" rx="4" fill="none" stroke="#e6e6e0" stroke-width="1.2"/>
+  <path d="M209.33 159.00 v180 M119.33 249.00 h180" stroke="#ebebe5" stroke-width="1" stroke-dasharray="4 4"/>
+  <g class="qlive" transform="translate(119.33 159.00) scale(2.8125)">
+    <g fill="none" stroke="#3a3a35" stroke-width="0.782" stroke-linecap="round" stroke-linejoin="round"><path class="qs0" d="M14 15 H50"/><path class="qs1" d="M9 29 H55"/><path class="qs2" d="M32 15 V27 C30 38 22 48 10 55"/><path class="qs3" d="M33 31 C38 42 45 50 55 55"/></g>
+    <g fill="#fff" stroke="#8a8a82" stroke-width="0.462"><circle class="qr0" cx="14.00" cy="15.00" r="1.07"/><circle class="qr1" cx="50.00" cy="15.00" r="1.07"/><circle class="qr2" cx="9.00" cy="29.00" r="1.07"/><circle class="qr3" cx="55.00" cy="29.00" r="1.07"/><circle class="qr4" cx="32.00" cy="15.00" r="1.07"/><circle class="qr5" cx="10.00" cy="55.00" r="1.07"/><circle class="qr6" cx="33.00" cy="31.00" r="1.07"/><circle class="qr7" cx="55.00" cy="55.00" r="1.07"/></g>
   </g>
-
-  <text class="eyebrow" x="414" y="58">02 / VARIATION</text>
-  <text class="heading" x="414" y="91">同一骨架，写法不同</text>
-  <text class="caption" x="414" y="119">固定骨架和种子，可重现同一个版本</text>
-  <g transform="translate(424 148) scale(.9)">
-    <g class="variant-a" transform="translate(0 0)">
-      <path class="secondary" d="M15.16 17.24C15.15 17.35 15.15 17.35 15.11 18C15.07 18.75 14.96 20.5 14.91 21.75C14.85 23 14.91 24.25 14.8 25.5C14.69 26.75 14.13 28 14.24 29.25C14.36 30.5 15.3 31.75 15.48 33C15.67 34.25 15.4 35.5 15.35 36.75C15.3 38 15.26 39.25 15.2 40.5C15.14 41.75 15.06 43 14.99 44.25C14.92 45.5 14.83 47.16 14.79 48C14.75 48.84 14.73 49.05 14.72 49.26M32.24 9.24C32.24 9.35 32.24 9.35 32.24 10C32.25 10.73 32.29 12.42 32.27 13.64C32.26 14.85 32.16 16.06 32.15 17.27C32.14 18.48 32.3 19.7 32.2 20.91C32.09 22.12 31.69 23.33 31.51 24.55C31.34 25.76 31.06 26.97 31.15 28.18C31.23 29.39 31.83 30.61 32.03 31.82C32.22 33.03 32.27 34.24 32.3 35.45C32.33 36.67 32.22 37.88 32.22 39.09C32.22 40.3 32.3 41.52 32.3 42.73C32.3 43.94 32.21 45.15 32.22 46.36C32.23 47.58 32.32 49.18 32.35 50C32.38 50.82 32.39 51.05 32.4 51.27M49.03 17.24C49.04 17.35 49.04 17.35 49.07 18C49.11 18.75 49.21 20.5 49.26 21.75C49.3 23 49.35 24.25 49.36 25.5C49.37 26.75 49.5 28 49.3 29.25C49.1 30.5 48.24 31.75 48.17 33C48.1 34.25 48.75 35.5 48.89 36.75C49.03 38 48.94 39.25 48.99 40.5C49.04 41.75 49.1 43 49.18 44.25C49.26 45.5 49.41 47.16 49.48 48C49.54 48.84 49.56 49.05 49.58 49.26M14.24 48.22C14.35 48.21 14.35 48.21 15 48.19C15.76 48.16 17.52 48.09 18.78 48.05C20.04 48.02 21.3 48.1 22.56 47.99C23.81 47.88 25.07 47.48 26.33 47.4C27.59 47.32 28.85 47.31 30.11 47.5C31.37 47.69 32.63 48.42 33.89 48.55C35.15 48.68 36.41 48.31 37.67 48.26C38.93 48.21 40.19 48.29 41.44 48.26C42.7 48.23 43.96 48.13 45.22 48.08C46.48 48.04 48.16 48.01 49 47.99C49.84 47.97 50.06 47.97 50.27 47.96"/>
-    </g>
-    <g class="variant-b" transform="translate(74 0)">
-      <path class="ink" d="M15.23 17.24C15.23 17.35 15.23 17.35 15.2 18C15.17 18.75 15.08 20.5 15.04 21.75C15 23 15.11 24.25 14.97 25.5C14.82 26.75 14.15 28 14.17 29.25C14.2 30.5 14.91 31.75 15.11 33C15.32 34.25 15.38 35.5 15.4 36.75C15.43 38 15.32 39.25 15.27 40.5C15.22 41.75 15.14 43 15.1 44.25C15.06 45.5 15.04 47.16 15.03 48C15.01 48.84 15 49.06 15 49.27M32.18 9.24C32.19 9.35 32.19 9.35 32.2 10C32.22 10.73 32.3 12.42 32.3 13.64C32.31 14.85 32.21 16.06 32.22 17.27C32.23 18.48 32.42 19.7 32.36 20.91C32.3 22.12 32.07 23.33 31.86 24.55C31.65 25.76 31.12 26.97 31.1 28.18C31.07 29.39 31.52 30.61 31.7 31.82C31.88 33.03 32.1 34.24 32.18 35.45C32.25 36.67 32.12 37.88 32.14 39.09C32.15 40.3 32.26 41.52 32.28 42.73C32.3 43.94 32.21 45.15 32.24 46.36C32.28 47.58 32.43 49.18 32.48 50C32.54 50.82 32.55 51.05 32.57 51.26M48.91 17.24C48.92 17.35 48.92 17.35 48.96 18C49 18.75 49.11 20.5 49.17 21.75C49.22 23 49.21 24.25 49.28 25.5C49.36 26.75 49.78 28 49.62 29.25C49.46 30.5 48.48 31.75 48.33 33C48.18 34.25 48.64 35.5 48.73 36.75C48.81 38 48.8 39.25 48.86 40.5C48.92 41.75 49.01 43 49.09 44.25C49.16 45.5 49.28 47.16 49.34 48C49.4 48.84 49.41 49.05 49.42 49.26M14.24 48.25C14.35 48.25 14.35 48.25 15 48.24C15.76 48.23 17.52 48.2 18.78 48.18C20.04 48.16 21.3 48.21 22.56 48.12C23.81 48.03 25.07 47.79 26.33 47.63C27.59 47.48 28.85 47.09 30.11 47.2C31.37 47.32 32.63 48.13 33.89 48.31C35.15 48.48 36.41 48.27 37.67 48.27C38.93 48.27 40.19 48.31 41.44 48.3C42.7 48.28 43.96 48.19 45.22 48.18C46.48 48.17 48.16 48.22 49 48.23C49.84 48.24 50.06 48.24 50.27 48.24"/>
-    </g>
-    <g class="variant-c" transform="translate(148 0)">
-      <path class="secondary" d="M14.92 17.24C14.92 17.35 14.92 17.35 14.89 18C14.86 18.75 14.77 20.5 14.73 21.75C14.68 23 14.61 24.25 14.63 25.5C14.65 26.75 14.64 28 14.84 29.25C15.04 30.5 15.81 31.75 15.85 33C15.88 34.25 15.19 35.5 15.04 36.75C14.89 38 15 39.25 14.96 40.5C14.92 41.75 14.87 43 14.79 44.25C14.71 45.5 14.56 47.16 14.5 48C14.43 48.84 14.42 49.05 14.4 49.26M32.18 9.24C32.18 9.35 32.18 9.35 32.16 10C32.14 10.73 32.09 12.42 32.05 13.64C32.01 14.85 31.98 16.06 31.94 17.27C31.89 18.48 31.9 19.7 31.77 20.91C31.65 22.12 31.2 23.33 31.2 24.55C31.2 25.76 31.53 26.97 31.77 28.18C32 29.39 32.5 30.61 32.6 31.82C32.69 33.03 32.4 34.24 32.34 35.45C32.28 36.67 32.26 37.88 32.23 39.09C32.2 40.3 32.17 41.52 32.14 42.73C32.11 43.94 32.09 45.15 32.05 46.36C32.01 47.58 31.93 49.18 31.9 50C31.87 50.82 31.86 51.05 31.85 51.27M49.23 17.24C49.23 17.35 49.23 17.35 49.23 18C49.23 18.75 49.24 20.5 49.25 21.75C49.26 23 49.4 24.25 49.28 25.5C49.16 26.75 48.69 28 48.55 29.25C48.4 30.5 48.27 31.75 48.39 33C48.51 34.25 49.11 35.5 49.25 36.75C49.39 38 49.22 39.25 49.22 40.5C49.22 41.75 49.21 43 49.24 44.25C49.28 45.5 49.39 47.16 49.43 48C49.47 48.84 49.48 49.05 49.49 49.27M14.24 48.02C14.35 48.02 14.35 48.02 15 47.99C15.76 47.95 17.52 47.83 18.78 47.79C20.04 47.75 21.3 47.83 22.56 47.76C23.81 47.69 25.07 47.26 26.33 47.36C27.59 47.45 28.85 48.12 30.11 48.33C31.37 48.55 32.63 48.68 33.89 48.64C35.15 48.6 36.41 48.19 37.67 48.09C38.93 47.99 40.19 48.06 41.44 48.02C42.7 47.98 43.96 47.94 45.22 47.86C46.48 47.79 48.16 47.64 49 47.58C49.84 47.51 50.05 47.5 50.26 47.48"/>
-    </g>
+  <g class="qlive" fill="none" stroke="#09090B" stroke-linecap="round" stroke-linejoin="round">
+    <g transform="translate(496.00 237.00) scale(1.4375) translate(-31.63 -33.86)" stroke-width="2.8"><g transform="translate(31.56 32.47) rotate(-0.54) scale(0.9310 0.9177) translate(-32.00 -33.50)"><path class="qs4" d="M13.2 14.82C13.32 14.82 13.32 14.82 14 14.82C14.73 14.83 16.4 14.83 17.6 14.84C18.8 14.86 20 14.88 21.2 14.92C22.4 14.95 23.6 14.91 24.8 15.03C26 15.15 27.2 15.6 28.4 15.63C29.6 15.66 30.8 15.36 32 15.21C33.2 15.06 34.4 14.77 35.6 14.71C36.8 14.65 38 14.82 39.2 14.83C40.4 14.85 41.6 14.78 42.8 14.78C44 14.79 45.2 14.86 46.4 14.86C47.6 14.87 49.18 14.82 50 14.81C50.82 14.8 51.11 14.8 51.33 14.79" stroke-width="2.52"/><path class="qs5" d="M8.2 28.93C8.32 28.93 8.32 28.93 9 28.91C9.72 28.89 11.36 28.84 12.54 28.82C13.72 28.8 14.9 28.82 16.08 28.81C17.26 28.81 18.44 28.81 19.62 28.77C20.79 28.74 21.97 28.59 23.15 28.63C24.33 28.66 25.51 28.83 26.69 28.99C27.87 29.15 29.05 29.51 30.23 29.58C31.41 29.66 32.59 29.55 33.77 29.46C34.95 29.37 36.13 29.12 37.31 29.04C38.49 28.96 39.67 29 40.85 28.98C42.03 28.97 43.21 28.96 44.38 28.93C45.56 28.91 46.74 28.85 47.92 28.84C49.1 28.82 50.28 28.87 51.46 28.84C52.64 28.81 54.19 28.68 55 28.63C55.81 28.58 56.11 28.56 56.33 28.55" stroke-width="2.576"/><path class="qs6" d="M31.88 14.2C31.88 14.31 31.88 14.31 31.89 15C31.9 15.8 31.91 17.67 31.93 19C31.96 20.33 32.02 21.67 32.04 23C32.06 24.33 32.14 25.88 32.05 27C31.97 28.13 31.71 28.84 31.53 29.77C31.35 30.7 31.24 31.66 30.97 32.58C30.69 33.49 30.37 34.42 29.89 35.26C29.41 36.1 28.72 36.84 28.09 37.6C27.47 38.37 26.77 39.07 26.17 39.84C25.56 40.62 25.05 41.46 24.46 42.27C23.88 43.09 23.31 43.94 22.64 44.72C21.98 45.5 21.23 46.22 20.48 46.95C19.73 47.69 18.94 48.41 18.14 49.12C17.33 49.84 16.51 50.56 15.64 51.24C14.77 51.91 13.83 52.52 12.9 53.16C11.96 53.8 10.71 54.63 10.05 55.08C9.39 55.52 9.13 55.7 8.94 55.82" stroke-width="2.856"/><path class="qs7" d="M32.51 30.35C32.57 30.47 32.58 30.5 32.85 31.07C33.11 31.65 33.65 32.91 34.1 33.79C34.55 34.66 35.07 35.48 35.55 36.32C36.03 37.15 36.45 38.02 36.98 38.79C37.51 39.57 38.09 40.31 38.74 40.98C39.38 41.65 40.23 42.14 40.85 42.8C41.46 43.46 41.93 44.22 42.44 44.97C42.95 45.71 43.33 46.59 43.9 47.28C44.47 47.98 45.19 48.53 45.86 49.12C46.54 49.71 47.23 50.27 47.95 50.82C48.66 51.37 49.37 51.92 50.13 52.43C50.88 52.93 51.68 53.37 52.47 53.84C53.26 54.32 54.27 54.91 54.86 55.27C55.45 55.62 55.81 55.84 56 55.95" stroke-width="3.024"/></g></g>
+    <text class="mono" x="496.00" y="313.00" text-anchor="middle">seed 41</text>
+    <g transform="translate(600.00 237.00) scale(1.4375) translate(-33.05 -34.52)" stroke-width="2.8"><g transform="translate(32.98 32.93) rotate(-0.46) scale(1.1133 1.0475) translate(-32.00 -33.50)"><path class="qs8" d="M13.2 14.82C13.32 14.82 13.32 14.82 14 14.82C14.73 14.83 16.4 14.83 17.6 14.84C18.8 14.86 20 14.88 21.2 14.92C22.4 14.95 23.6 14.91 24.8 15.03C26 15.15 27.2 15.6 28.4 15.63C29.6 15.66 30.8 15.36 32 15.21C33.2 15.06 34.4 14.77 35.6 14.71C36.8 14.65 38 14.82 39.2 14.83C40.4 14.85 41.6 14.78 42.8 14.78C44 14.79 45.2 14.86 46.4 14.86C47.6 14.87 49.18 14.82 50 14.81C50.82 14.8 51.11 14.8 51.33 14.79" stroke-width="2.52"/><path class="qs9" d="M8.2 28.93C8.32 28.93 8.32 28.93 9 28.91C9.72 28.89 11.36 28.84 12.54 28.82C13.72 28.8 14.9 28.82 16.08 28.81C17.26 28.81 18.44 28.81 19.62 28.77C20.79 28.74 21.97 28.59 23.15 28.63C24.33 28.66 25.51 28.83 26.69 28.99C27.87 29.15 29.05 29.51 30.23 29.58C31.41 29.66 32.59 29.55 33.77 29.46C34.95 29.37 36.13 29.12 37.31 29.04C38.49 28.96 39.67 29 40.85 28.98C42.03 28.97 43.21 28.96 44.38 28.93C45.56 28.91 46.74 28.85 47.92 28.84C49.1 28.82 50.28 28.87 51.46 28.84C52.64 28.81 54.19 28.68 55 28.63C55.81 28.58 56.11 28.56 56.33 28.55" stroke-width="2.576"/><path class="qs10" d="M31.88 14.2C31.88 14.31 31.88 14.31 31.89 15C31.9 15.8 31.91 17.67 31.93 19C31.96 20.33 32.02 21.67 32.04 23C32.06 24.33 32.14 25.88 32.05 27C31.97 28.13 31.71 28.84 31.53 29.77C31.35 30.7 31.24 31.66 30.97 32.58C30.69 33.49 30.37 34.42 29.89 35.26C29.41 36.1 28.72 36.84 28.09 37.6C27.47 38.37 26.77 39.07 26.17 39.84C25.56 40.62 25.05 41.46 24.46 42.27C23.88 43.09 23.31 43.94 22.64 44.72C21.98 45.5 21.23 46.22 20.48 46.95C19.73 47.69 18.94 48.41 18.14 49.12C17.33 49.84 16.51 50.56 15.64 51.24C14.77 51.91 13.83 52.52 12.9 53.16C11.96 53.8 10.71 54.63 10.05 55.08C9.39 55.52 9.13 55.7 8.94 55.82" stroke-width="2.856"/><path class="qs11" d="M32.51 30.35C32.57 30.47 32.58 30.5 32.85 31.07C33.11 31.65 33.65 32.91 34.1 33.79C34.55 34.66 35.07 35.48 35.55 36.32C36.03 37.15 36.45 38.02 36.98 38.79C37.51 39.57 38.09 40.31 38.74 40.98C39.38 41.65 40.23 42.14 40.85 42.8C41.46 43.46 41.93 44.22 42.44 44.97C42.95 45.71 43.33 46.59 43.9 47.28C44.47 47.98 45.19 48.53 45.86 49.12C46.54 49.71 47.23 50.27 47.95 50.82C48.66 51.37 49.37 51.92 50.13 52.43C50.88 52.93 51.68 53.37 52.47 53.84C53.26 54.32 54.27 54.91 54.86 55.27C55.45 55.62 55.81 55.84 56 55.95" stroke-width="3.024"/></g></g>
+    <text class="mono" x="600.00" y="313.00" text-anchor="middle">seed 189</text>
+    <g transform="translate(704.00 237.00) scale(1.4375) translate(-31.42 -32.74)" stroke-width="2.8"><g transform="translate(31.21 31.05) rotate(-1.30) scale(1.0524 1.0908) translate(-32.00 -33.50)"><path class="qs12" d="M13.2 14.82C13.32 14.82 13.32 14.82 14 14.82C14.73 14.83 16.4 14.83 17.6 14.84C18.8 14.86 20 14.88 21.2 14.92C22.4 14.95 23.6 14.91 24.8 15.03C26 15.15 27.2 15.6 28.4 15.63C29.6 15.66 30.8 15.36 32 15.21C33.2 15.06 34.4 14.77 35.6 14.71C36.8 14.65 38 14.82 39.2 14.83C40.4 14.85 41.6 14.78 42.8 14.78C44 14.79 45.2 14.86 46.4 14.86C47.6 14.87 49.18 14.82 50 14.81C50.82 14.8 51.11 14.8 51.33 14.79" stroke-width="2.52"/><path class="qs13" d="M8.2 28.93C8.32 28.93 8.32 28.93 9 28.91C9.72 28.89 11.36 28.84 12.54 28.82C13.72 28.8 14.9 28.82 16.08 28.81C17.26 28.81 18.44 28.81 19.62 28.77C20.79 28.74 21.97 28.59 23.15 28.63C24.33 28.66 25.51 28.83 26.69 28.99C27.87 29.15 29.05 29.51 30.23 29.58C31.41 29.66 32.59 29.55 33.77 29.46C34.95 29.37 36.13 29.12 37.31 29.04C38.49 28.96 39.67 29 40.85 28.98C42.03 28.97 43.21 28.96 44.38 28.93C45.56 28.91 46.74 28.85 47.92 28.84C49.1 28.82 50.28 28.87 51.46 28.84C52.64 28.81 54.19 28.68 55 28.63C55.81 28.58 56.11 28.56 56.33 28.55" stroke-width="2.576"/><path class="qs14" d="M31.88 14.2C31.88 14.31 31.88 14.31 31.89 15C31.9 15.8 31.91 17.67 31.93 19C31.96 20.33 32.02 21.67 32.04 23C32.06 24.33 32.14 25.88 32.05 27C31.97 28.13 31.71 28.84 31.53 29.77C31.35 30.7 31.24 31.66 30.97 32.58C30.69 33.49 30.37 34.42 29.89 35.26C29.41 36.1 28.72 36.84 28.09 37.6C27.47 38.37 26.77 39.07 26.17 39.84C25.56 40.62 25.05 41.46 24.46 42.27C23.88 43.09 23.31 43.94 22.64 44.72C21.98 45.5 21.23 46.22 20.48 46.95C19.73 47.69 18.94 48.41 18.14 49.12C17.33 49.84 16.51 50.56 15.64 51.24C14.77 51.91 13.83 52.52 12.9 53.16C11.96 53.8 10.71 54.63 10.05 55.08C9.39 55.52 9.13 55.7 8.94 55.82" stroke-width="2.856"/><path class="qs15" d="M32.51 30.35C32.57 30.47 32.58 30.5 32.85 31.07C33.11 31.65 33.65 32.91 34.1 33.79C34.55 34.66 35.07 35.48 35.55 36.32C36.03 37.15 36.45 38.02 36.98 38.79C37.51 39.57 38.09 40.31 38.74 40.98C39.38 41.65 40.23 42.14 40.85 42.8C41.46 43.46 41.93 44.22 42.44 44.97C42.95 45.71 43.33 46.59 43.9 47.28C44.47 47.98 45.19 48.53 45.86 49.12C46.54 49.71 47.23 50.27 47.95 50.82C48.66 51.37 49.37 51.92 50.13 52.43C50.88 52.93 51.68 53.37 52.47 53.84C53.26 54.32 54.27 54.91 54.86 55.27C55.45 55.62 55.81 55.84 56 55.95" stroke-width="3.024"/></g></g>
+    <text class="mono" x="704.00" y="313.00" text-anchor="middle">seed 362</text>
   </g>
-
-  <text class="eyebrow" x="782" y="58">03 / EXPORT</text>
-  <text class="heading" x="782" y="91">导出为 SVG</text>
-  <text class="caption" x="782" y="119">每一笔仍是可编辑的矢量路径</text>
-  <g class="export-card" transform="translate(844 144)">
-    <rect x="0" y="0" width="158" height="150" rx="14" fill="#f6f6f3" stroke="#deded8"/>
-    <path d="M119 0V31H158" fill="none" stroke="#deded8" stroke-width="1.2"/>
-    <rect x="104" y="14" width="42" height="20" rx="10" fill="#252520"/>
-    <text x="125" y="28" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">SVG</text>
-    <g transform="translate(48 49) scale(.95)">
-      <path class="ink" d="M15.23 17.24C15.23 17.35 15.23 17.35 15.2 18C15.17 18.75 15.08 20.5 15.04 21.75C15 23 15.11 24.25 14.97 25.5C14.82 26.75 14.15 28 14.17 29.25C14.2 30.5 14.91 31.75 15.11 33C15.32 34.25 15.38 35.5 15.4 36.75C15.43 38 15.32 39.25 15.27 40.5C15.22 41.75 15.14 43 15.1 44.25C15.06 45.5 15.04 47.16 15.03 48C15.01 48.84 15 49.06 15 49.27M32.18 9.24C32.19 9.35 32.19 9.35 32.2 10C32.22 10.73 32.3 12.42 32.3 13.64C32.31 14.85 32.21 16.06 32.22 17.27C32.23 18.48 32.42 19.7 32.36 20.91C32.3 22.12 32.07 23.33 31.86 24.55C31.65 25.76 31.12 26.97 31.1 28.18C31.07 29.39 31.52 30.61 31.7 31.82C31.88 33.03 32.1 34.24 32.18 35.45C32.25 36.67 32.12 37.88 32.14 39.09C32.15 40.3 32.26 41.52 32.28 42.73C32.3 43.94 32.21 45.15 32.24 46.36C32.28 47.58 32.43 49.18 32.48 50C32.54 50.82 32.55 51.05 32.57 51.26M48.91 17.24C48.92 17.35 48.92 17.35 48.96 18C49 18.75 49.11 20.5 49.17 21.75C49.22 23 49.21 24.25 49.28 25.5C49.36 26.75 49.78 28 49.62 29.25C49.46 30.5 48.48 31.75 48.33 33C48.18 34.25 48.64 35.5 48.73 36.75C48.81 38 48.8 39.25 48.86 40.5C48.92 41.75 49.01 43 49.09 44.25C49.16 45.5 49.28 47.16 49.34 48C49.4 48.84 49.41 49.05 49.42 49.26M14.24 48.25C14.35 48.25 14.35 48.25 15 48.24C15.76 48.23 17.52 48.2 18.78 48.18C20.04 48.16 21.3 48.21 22.56 48.12C23.81 48.03 25.07 47.79 26.33 47.63C27.59 47.48 28.85 47.09 30.11 47.2C31.37 47.32 32.63 48.13 33.89 48.31C35.15 48.48 36.41 48.27 37.67 48.27C38.93 48.27 40.19 48.31 41.44 48.3C42.7 48.28 43.96 48.19 45.22 48.18C46.48 48.17 48.16 48.22 49 48.23C49.84 48.24 50.06 48.24 50.27 48.24"/>
+  <g class="qlive">
+    <g class="qr8">
+      <path d="M916.6666666666667 165 Q916.6666666666667 153 928.6666666666667 153 H1038.6666666666667 L1064.6666666666667 179 V313 Q1064.6666666666667 325 1052.6666666666667 325 H928.6666666666667 Q916.6666666666667 325 916.6666666666667 313 Z" fill="#fafaf7" stroke="#deded8" stroke-width="1.2"/>
+      <path d="M1038.6666666666667 153 V171 Q1038.6666666666667 179 1046.6666666666667 179 H1064.6666666666667" fill="none" stroke="#deded8" stroke-width="1.2"/>
+      <rect x="930.6666666666667" y="167" width="40" height="19" rx="9.5" fill="#20201d"/>
+      <text x="950.6666666666667" y="180.5" text-anchor="middle" font-size="10" font-weight="700" letter-spacing=".6" fill="#fff">SVG</text>
+      <text class="file" x="990.6666666666667" y="353" text-anchor="middle">天.svg</text>
     </g>
-    <text x="79" y="128" text-anchor="middle" fill="#50504a" font-size="13" font-weight="600">山.svg</text>
+    <g transform="translate(990.6666666666667 247) scale(1.5) translate(-33.12 -34.34)" fill="none" stroke="#09090B" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><g transform="translate(32.98 32.77) rotate(-0.83) scale(1.0889 1.0249) translate(-32.00 -33.50)"><path class="qs16" d="M13.2 14.82C13.32 14.82 13.32 14.82 14 14.82C14.73 14.83 16.4 14.83 17.6 14.84C18.8 14.86 20 14.88 21.2 14.92C22.4 14.95 23.6 14.91 24.8 15.03C26 15.15 27.2 15.6 28.4 15.63C29.6 15.66 30.8 15.36 32 15.21C33.2 15.06 34.4 14.77 35.6 14.71C36.8 14.65 38 14.82 39.2 14.83C40.4 14.85 41.6 14.78 42.8 14.78C44 14.79 45.2 14.86 46.4 14.86C47.6 14.87 49.18 14.82 50 14.81C50.82 14.8 51.11 14.8 51.33 14.79" stroke-width="2.52"/><path class="qs17" d="M8.2 28.93C8.32 28.93 8.32 28.93 9 28.91C9.72 28.89 11.36 28.84 12.54 28.82C13.72 28.8 14.9 28.82 16.08 28.81C17.26 28.81 18.44 28.81 19.62 28.77C20.79 28.74 21.97 28.59 23.15 28.63C24.33 28.66 25.51 28.83 26.69 28.99C27.87 29.15 29.05 29.51 30.23 29.58C31.41 29.66 32.59 29.55 33.77 29.46C34.95 29.37 36.13 29.12 37.31 29.04C38.49 28.96 39.67 29 40.85 28.98C42.03 28.97 43.21 28.96 44.38 28.93C45.56 28.91 46.74 28.85 47.92 28.84C49.1 28.82 50.28 28.87 51.46 28.84C52.64 28.81 54.19 28.68 55 28.63C55.81 28.58 56.11 28.56 56.33 28.55" stroke-width="2.576"/><path class="qs18" d="M31.88 14.2C31.88 14.31 31.88 14.31 31.89 15C31.9 15.8 31.91 17.67 31.93 19C31.96 20.33 32.02 21.67 32.04 23C32.06 24.33 32.14 25.88 32.05 27C31.97 28.13 31.71 28.84 31.53 29.77C31.35 30.7 31.24 31.66 30.97 32.58C30.69 33.49 30.37 34.42 29.89 35.26C29.41 36.1 28.72 36.84 28.09 37.6C27.47 38.37 26.77 39.07 26.17 39.84C25.56 40.62 25.05 41.46 24.46 42.27C23.88 43.09 23.31 43.94 22.64 44.72C21.98 45.5 21.23 46.22 20.48 46.95C19.73 47.69 18.94 48.41 18.14 49.12C17.33 49.84 16.51 50.56 15.64 51.24C14.77 51.91 13.83 52.52 12.9 53.16C11.96 53.8 10.71 54.63 10.05 55.08C9.39 55.52 9.13 55.7 8.94 55.82" stroke-width="2.856"/><path class="qs19" d="M32.51 30.35C32.57 30.47 32.58 30.5 32.85 31.07C33.11 31.65 33.65 32.91 34.1 33.79C34.55 34.66 35.07 35.48 35.55 36.32C36.03 37.15 36.45 38.02 36.98 38.79C37.51 39.57 38.09 40.31 38.74 40.98C39.38 41.65 40.23 42.14 40.85 42.8C41.46 43.46 41.93 44.22 42.44 44.97C42.95 45.71 43.33 46.59 43.9 47.28C44.47 47.98 45.19 48.53 45.86 49.12C46.54 49.71 47.23 50.27 47.95 50.82C48.66 51.37 49.37 51.92 50.13 52.43C50.88 52.93 51.68 53.37 52.47 53.84C53.26 54.32 54.27 54.91 54.86 55.27C55.45 55.62 55.81 55.84 56 55.95" stroke-width="3.024"/></g></g>
   </g>
-  <text class="caption" x="782" y="320">Yuragi · 空白字库开始</text>
 </svg>

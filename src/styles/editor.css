@@ -27,6 +27,10 @@
   --r-field: var(--r-control);
   --r-button: 11px;
   --r-floating-control: 18px;
+  /* 全局图标线宽：屏幕上的实际粗细，不随图标显示尺寸缩放。 */
+  --icon-stroke: 1.6px;
+  /* 键帽里的 ⌘ / ⌫ / 鼠标是当文字用的，线宽跟 9px 半粗体键帽字对齐。 */
+  --icon-stroke-key: 1.15px;
 
   /* 右栏滑杆的结构：内容区 14px 外边距 + 文字 12px 内缩。 */
   --panel-content-gutter: 14px;
@@ -260,6 +264,12 @@ button { color: inherit; }
 .write-content.is-reference-required { width: 74px; padding-inline: 8px; }
 .write-content.is-reference-required input { width: 58px; min-width: 58px; }
 .tools .sep { width: 1px; height: 24px; margin: 0 4px; background: var(--line); }
+/* 所有界面图标（.ui-icon）统一屏幕线宽：non-scaling-stroke 让 9px 和 19px 的图标画出同样粗的线，
+   不再因为 viewBox / strokeWidth / 显示尺寸各不相同而一粗一细。 */
+svg.ui-icon :is(path, rect, circle, ellipse, line, polyline, polygon) {
+  stroke-width: var(--icon-stroke);
+  vector-effect: non-scaling-stroke;
+}
 .tools button.tool-toggle {
   display: grid;
   place-items: center;
@@ -394,6 +404,32 @@ button { color: inherit; }
 }
 .help-button:hover, .help-button[data-open="true"] { color: var(--ink); }
 
+/* 画布右下角的轻量工具组：源码入口、缩放和帮助共用一条基线。 */
+.help-anchor {
+  position: absolute;
+  right: var(--outer-gutter);
+  bottom: var(--outer-gutter);
+  z-index: 6;
+}
+.corner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.corner-actions > * { pointer-events: auto; }
+.help-anchor .zoom-controls--corner {
+  position: static;
+  right: auto;
+  bottom: auto;
+  z-index: auto;
+}
+.help-anchor .help-button {
+  position: static;
+  right: auto;
+  bottom: auto;
+  flex: none;
+}
+
 .help-pop {
   position: absolute;
   right: var(--outer-gutter);
@@ -409,6 +445,66 @@ button { color: inherit; }
   box-shadow: 0 8px 28px rgb(0 0 0 / 14%), 0 0 0 1px rgb(0 0 0 / 5%);
   animation: pop-in .14s cubic-bezier(.32, .72, 0, 1);
 }
+.help-anchor .help-pop {
+  right: 0;
+  bottom: calc(100% + 8px);
+}
+/* 「更多」卡片：开源入口 + Skill 推荐，和帮助卡共用右下角锚点。 */
+.more-anchor {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+}
+.more-pop {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 7;
+  display: grid;
+  gap: 2px;
+  width: 264px;
+  padding: 6px;
+  border-radius: var(--r-card);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.55;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 14%), 0 0 0 1px rgb(0 0 0 / 5%);
+  transform-origin: bottom right;
+  animation: pop-in .14s cubic-bezier(.32, .72, 0, 1);
+}
+.more-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 8px 8px;
+  border-radius: calc(var(--r-card) - 6px);
+  color: var(--muted);
+  text-decoration: none;
+  transition: background .16s ease, color .16s ease;
+}
+.more-link:hover, .more-link:focus-visible { background: var(--soft); color: var(--ink); outline: none; }
+.more-link-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  transition: color .16s ease;
+}
+.more-link-icon svg { width: 18px; height: 18px; }
+.more-link:hover .more-link-icon, .more-link:focus-visible .more-link-icon { color: var(--ink); }
+.more-link[aria-disabled="true"]:hover .more-link-icon { color: var(--muted); }
+.more-link-text { display: grid; flex: 1; min-width: 0; }
+.more-link-text b { color: var(--ink); font-size: 12px; font-weight: 700; }
+.more-link-text small { overflow: hidden; font-size: 11px; white-space: nowrap; text-overflow: ellipsis; }
+.more-link .external-mark { display: block; flex: none; width: 18px; height: 18px; }
+.more-link[aria-disabled="true"] { cursor: default; }
+.more-link[aria-disabled="true"]:hover { background: none; color: var(--muted); }
+
 .help-pop b { display: block; margin-bottom: 8px; color: var(--ink); font-size: 12px; font-weight: 700; }
 .help-pop > b:not(:first-of-type) { margin-top: 12px; }
 .help-pop .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 3px 0; }
@@ -455,7 +551,8 @@ button { color: inherit; }
 }
 .shortcut-key--icon { width: 18px; padding: 0; }
 .shortcut-key-icon { display: grid; place-items: center; }
-.shortcut-key-icon svg { display: block; width: 9px; height: 9px; }
+.shortcut-key-icon svg { display: block; width: 10px; height: 10px; }
+.shortcut-key-icon svg.ui-icon :is(path, rect, circle) { stroke-width: var(--icon-stroke-key); }
 .shortcut-key-icon svg path { stroke: currentColor; }
 
 .rowbar {
@@ -464,7 +561,8 @@ button { color: inherit; }
   flex-direction: column;
   flex: none;
   margin: 0 var(--outer-gutter) var(--outer-gutter);
-  padding: 2px 12px 9px 18px;
+  /* 右上角「逐字数据」图标离上边、右边都约 20px，和左侧「预览」标题的缩进对齐。 */
+  padding: 11px 12px 9px 18px;
   min-height: 88px;
   max-height: min(248px, calc(100vh - 160px));
   border-radius: var(--r-panel);
@@ -566,6 +664,8 @@ button { color: inherit; }
 }
 .hud-top-right { display: flex; align-items: center; gap: 8px; pointer-events: none; }
 .hud-top-right > * { pointer-events: auto; }
+.more-button { padding: 0; }
+.more-button svg { display: block; width: 14px; height: 14px; }
 .preview-control-wrap {
   --preview-control-size: 34px;
   display: grid;
@@ -1417,17 +1517,11 @@ button { color: inherit; }
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-:is(.icon-button, .panel-stub, .tools, .row-menu, .drawing-action-icon, .select-trigger, .section-trigger, .export-remove, .export-action) svg:not([stroke="currentColor"]):not(.pika-ui-icon) path {
+:is(.icon-button, .panel-stub, .tools, .row-menu, .drawing-action-icon, .select-trigger, .section-trigger, .export-remove, .export-action) svg:not([stroke="currentColor"]):not(.ui-icon) path {
   stroke: currentColor;
   stroke-width: 1.8;
 }
 :is(.icon-button, .panel-stub, .tools) svg[stroke="currentColor"] { stroke-width: 1.7; }
-.pika-ui-icon :is(path, rect, circle, line, polyline, polygon) {
-  stroke: currentColor;
-  stroke-width: 2.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
 .tools button.tool-toggle { border-radius: calc(var(--r-card) - 4px); }
 .metrics-toggle, .canvas-selection, .canvas-title > span, .switch-row, .menu-item, .select-item { font-weight: 600; }
 .selection-status, .metrics-note, .field-note { font-weight: 500; }
@@ -1830,7 +1924,7 @@ button { color: inherit; }
 
   .rowbar {
     margin: 0 12px calc(12px + env(safe-area-inset-bottom));
-    padding: 4px 10px 10px 12px;
+    padding: 6px 6px 10px 12px;
     min-height: 96px;
     max-height: min(34dvh, 248px);
     border-radius: 20px;
@@ -1857,14 +1951,12 @@ button { color: inherit; }
   .metrics-note { margin-inline: 6px; }
 
   .zoom-controls--corner {
-    right: calc(var(--outer-gutter) + 26px + 8px);
-    bottom: var(--outer-gutter);
     padding: 3px;
   }
   .zoom-controls .icon-button { width: 30px; height: 30px; border-radius: 8px; }
   .zoom-controls .icon-button svg { width: 13px; height: 13px; }
   .zoom-controls .zoom-readout { min-width: 44px; height: 30px; border-radius: 8px; }
-  .help-button { right: var(--outer-gutter); bottom: var(--outer-gutter); width: 34px; height: 34px; }
+  .help-button { width: 34px; height: 34px; }
   .help-pop {
     right: var(--outer-gutter);
     bottom: calc(var(--outer-gutter) + 34px + 8px);

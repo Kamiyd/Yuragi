@@ -8,7 +8,7 @@
  * 不用回填。moov 在末尾播放器一样认（要边下边播才需要 faststart，本地文件不用）。
  *
  * 跟 gif.ts、跟导出 ZIP 是同一个取舍：宁可自己写这两百行，也不为一个容器格式
- * 拉一个依赖 —— 何况这个项目的 npm 装依赖本来就卡在 pikaicons 的 peer 上。
+ * 拉一个依赖。
  */
 
 export type Mp4Sample = {

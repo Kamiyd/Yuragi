@@ -5,22 +5,20 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Select from "@radix-ui/react-select";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
-  Command as CommandIcon,
-  Delete as ShortcutDeleteIcon,
-  Mouse as MouseIcon,
-} from "lucide-react";
-import {
-  Add as PlusIcon,
-  CheckTick as CheckIcon,
-  ChevronDown as ChevronDownIcon,
-  ChevronRight as ChevronRightIcon,
-  CopyCopy as CopyIcon,
-  CrossCross as Cross2Icon,
-  DeleteDustbin as TrashIcon,
-  Download01 as DownloadIcon,
-  FileFile as ProjectFileIcon,
-  MinusMinus as MinusIcon,
-} from "pikaicons";
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CommandIcon,
+  CopyIcon,
+  CrossIcon as Cross2Icon,
+  DeleteKeyIcon as ShortcutDeleteIcon,
+  DownloadIcon,
+  FileIcon as ProjectFileIcon,
+  MinusIcon,
+  MouseIcon,
+  PlusIcon,
+  TrashIcon,
+} from "./icons";
 import DraggableInput from "./DraggableInput";
 import {
   DEFAULT_LATIN_ADV,
@@ -209,6 +207,9 @@ const DEFAULT_INK_STYLE: InkStyle = { color: DEFAULT_INK_COLOR, opacity: DEFAULT
    这边到点就把影子从 DOM 里摘掉，CSS 拖得更长的话动画会被砍断。 */
 const INK_FADE_MS = 220;
 const DEFAULT_VIEW_SEED = 42;
+const SOURCE_REPO_URL = "https://github.com/Kamiyd/Yuragi";
+// Skill 下载地址预留位：填上链接后「更多」卡片里的下载按钮自动可用。
+const SKILL_DOWNLOAD_URL = "";
 const PREVIEW_MIN_HEIGHT = 88;
 // 预览高度最多容纳约四行；更多内容在预览区内部滚动。
 const PREVIEW_MAX_HEIGHT = 248;
@@ -1273,9 +1274,48 @@ const YuragiMark = (
   </svg>
 );
 
+/* 「更多」卡片里的入口图标：跟预览播放 / 彩蛋同一套规格 —— 16 网格、1.7 线宽、转角在路径里带圆角。 */
+function GithubMark() {
+  return (
+    <svg className="ui-icon github-mark" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4.3 9.1Q2.7 8.2 2.8 6.2L3.4 3.2Q3.65 2.35 4.4 2.75L6 3.6Q8 3.2 10 3.6L11.6 2.75Q12.35 2.35 12.6 3.2L13.2 6.2Q13.3 8.2 11.7 9.1Q8 10.3 4.3 9.1Z" />
+      <path d="M6.5 10.4V13.6M9.5 10.4V13.6" />
+      <path d="M6.5 12.4Q4.4 13 3.6 11.6" />
+    </svg>
+  );
+}
+
+function SkillMark() {
+  return (
+    <svg className="ui-icon skill-mark" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="1.9" width="10" height="12.2" rx="2.6" />
+      <path d="M8 5.1Q8.5 7.5 10.9 8Q8.5 8.5 8 10.9Q7.5 8.5 5.1 8Q7.5 7.5 8 5.1Z" />
+    </svg>
+  );
+}
+
+function MoreMark() {
+  return (
+    <svg className="more-mark" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <circle cx="5.5" cy="12" r="1.7" />
+      <circle cx="12" cy="12" r="1.7" />
+      <circle cx="18.5" cy="12" r="1.7" />
+    </svg>
+  );
+}
+
+function ExternalMark() {
+  return (
+    <svg className="ui-icon external-mark" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 11L10.6 5.4" />
+      <path d="M6.3 5H10Q11 5 11 6V9.7" />
+    </svg>
+  );
+}
+
 function PanelGlyph({ side }: { side: "left" | "right" }) {
   return (
-    <svg className="panel-glyph" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+    <svg className="ui-icon panel-glyph" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
       <rect x="1.6" y="2.9" width="12.8" height="10.2" rx="2.6" />
       <path d={side === "left" ? "M6.3 2.9V13.1" : "M9.7 2.9V13.1"} />
     </svg>
@@ -1284,7 +1324,7 @@ function PanelGlyph({ side }: { side: "left" | "right" }) {
 
 function PreviewPlaybackIcon({ paused = false }: { paused?: boolean }) {
   return (
-    <svg className="preview-playback-icon" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg className="ui-icon preview-playback-icon" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       {paused ? (
         <>
           <rect x="4.25" y="3.15" width="2.55" height="9.7" rx="1.25" />
@@ -1299,7 +1339,7 @@ function PreviewPlaybackIcon({ paused = false }: { paused?: boolean }) {
 
 function PreviewEggIcon() {
   return (
-    <svg className="preview-egg-icon" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg className="ui-icon preview-egg-icon" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M8 2.55c2.76 0 4.72 3.05 4.72 6.38 0 2.86-1.86 4.52-4.72 4.52s-4.72-1.66-4.72-4.52C3.28 5.6 5.24 2.55 8 2.55Z" />
       <path d="M4.55 7.45c.76-.48 1.4-.48 2.1 0 .72.49 1.37.49 2.08-.01.75-.52 1.37-.51 2.16-.03" />
       <path d="M5.1 10.35c.59.34 1.13.34 1.7 0 .66-.4 1.3-.4 1.96 0 .59.35 1.15.35 1.78-.02" />
@@ -1319,7 +1359,7 @@ function MoreGlyph() {
 
 function MetricsIcon() {
   return (
-    <svg className="metrics-toggle-icon" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg className="ui-icon metrics-toggle-icon" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M5.4 3.1h7.2a2.3 2.3 0 0 1 2.3 2.3v7.2a2.3 2.3 0 0 1-2.3 2.3H5.4a2.3 2.3 0 0 1-2.3-2.3V5.4a2.3 2.3 0 0 1 2.3-2.3Z" />
       <path d="M5.7 8.9c.7.7 1.2 1.2 2 1.9 1.2-1.3 2.3-2.5 3.8-3.9" />
     </svg>
@@ -1337,27 +1377,28 @@ function IconButton({ label, tooltipLabel = label, children, className = "", ...
 }
 
 const UnderIcon = (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
+  <svg className="ui-icon" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
     <path d="M4 14.5 L9 3.5 L14 14.5" /><path d="M6.2 10.5h5.6" />
   </svg>
 );
 const GridToolIcon = (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true">
+  <svg className="ui-icon" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true">
     <path d="M3.5 3.5h11v11h-11zM3.5 9h11M9 3.5v11" />
   </svg>
 );
-/** 智能识别：一笔横折落到位，角上点一下表示「认出来了」。 */
+/* 描摹两枚图标跟预览播放 / 彩蛋同一套规格：16 网格、1.7 线宽、转角带圆角。 */
+/** 智能识别：一横一竖带收尾的笔画落到位，右上角一颗星表示「认出来了」。 */
 const TraceSmartIcon = (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M2.8 6.2h7.4" />
-    <path d="M6.6 3.5v7.1c0 1.9-1 3.1-2.9 3.6" />
-    <path d="M13.7 2.6l.75 1.85 1.85.75-1.85.75-.75 1.85-.75-1.85-1.85-.75 1.85-.75z" />
+  <svg className="ui-icon" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M1.6 7H6.7" />
+    <path d="M4.4 4V10.2Q4.4 12.9 2.1 13.8" />
+    <path d="M11.8 2.2Q12.45 4.55 14.8 5.2Q12.45 5.85 11.8 8.2Q11.15 5.85 8.8 5.2Q11.15 4.55 11.8 2.2Z" />
   </svg>
 );
-/** 保留手迹：原样留下的那条抖线。 */
+/** 保留手迹：原样留下的一条起伏笔迹。 */
 const TraceRawIcon = (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M2.6 12.2c1.4-5.4 2.6-7.8 3.7-7.7 1.1.1.5 6.3 1.8 6.5 1.2.2 1.8-5.3 3.1-5.2 1.1.1.6 4.2 1.5 4.3.7.1 1.4-.7 2.3-2.3" />
+  <svg className="ui-icon" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M2.2 11.2C3 7.6 4 4.8 5.2 5C6.6 5.2 5.8 10.8 7.4 11C8.9 11.2 9.4 6 10.9 6.1C12.2 6.2 11.6 9.8 12.7 9.9C13.3 10 13.8 9.4 14 8.8" />
   </svg>
 );
 const TRACE_MODES = [
@@ -1365,7 +1406,7 @@ const TRACE_MODES = [
   { value: "original", label: "保留手迹", shortcut: "D", icon: TraceRawIcon, hint: "保留走向和回环，适合英文、连笔与手绘。" },
 ] as const;
 const BoneIcon = (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
+  <svg className="ui-icon" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
     <path d="M4 13c2-3 3-8 5-8 2.2 0 3 4 5 8" /><circle cx="9" cy="5" r="1.1" fill="currentColor" stroke="none" />
   </svg>
 );
@@ -1400,7 +1441,7 @@ function Section({
         <div className="section-trigger section-trigger--action">
           <Collapsible.Trigger className="section-trigger-main">
             <span className="section-title">{title}</span>
-            <span className="section-chevron" aria-hidden="true"><ChevronRightIcon className="pika-ui-icon" /></span>
+            <span className="section-chevron" aria-hidden="true"><ChevronRightIcon /></span>
             {aside && <span className="section-aside">{aside}</span>}
           </Collapsible.Trigger>
           <TooltipHint label={indicatorLabel || (open ? `添加${title}项` : `展开${title}`)}>
@@ -1419,7 +1460,7 @@ function Section({
       ) : (
         <Collapsible.Trigger className="section-trigger">
           <span className="section-title">{title}</span>
-          <span className="section-chevron" aria-hidden="true"><ChevronRightIcon className="pika-ui-icon" /></span>
+          <span className="section-chevron" aria-hidden="true"><ChevronRightIcon /></span>
           {aside && <span className="section-aside">{aside}</span>}
         </Collapsible.Trigger>
       )}
@@ -1984,6 +2025,7 @@ export default function EditorApp() {
   const referenceInputRef = React.useRef<HTMLInputElement | null>(null);
   const [viewHeight] = React.useState(44);
   const [helpOpen, setHelpOpen] = React.useState(false);
+  const [moreOpen, setMoreOpen] = React.useState(false);
   const [batchAddMenu, setBatchAddMenu] = React.useState<{ x: number; y: number } | null>(null);
   const [batchAddOpen, setBatchAddOpen] = React.useState(false);
   const [batchAddText, setBatchAddText] = React.useState("");
@@ -2898,20 +2940,21 @@ export default function EditorApp() {
   };
 
   React.useEffect(() => {
-    if (!helpOpen) return;
+    if (!helpOpen && !moreOpen) return;
+    const close = () => { setHelpOpen(false); setMoreOpen(false); };
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
       if (target && helpRef.current?.contains(target)) return;
-      setHelpOpen(false);
+      close();
     };
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setHelpOpen(false); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") close(); };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [helpOpen]);
+  }, [helpOpen, moreOpen]);
 
   React.useEffect(() => {
     if (!batchAddMenu) return;
@@ -4211,7 +4254,7 @@ export default function EditorApp() {
                   <Select.Root value={referenceFont} onValueChange={setReferenceFont}>
                     <Select.Trigger className="select-trigger reference-font-select" aria-label="参考字体">
                       <Select.Value />
-                      <Select.Icon><ChevronDownIcon className="pika-ui-icon" /></Select.Icon>
+                      <Select.Icon><ChevronDownIcon /></Select.Icon>
                     </Select.Trigger>
                     <Select.Portal>
                       <Select.Content className="select-content reference-font-content" position="popper" sideOffset={6}>
@@ -4219,7 +4262,7 @@ export default function EditorApp() {
                           {REFERENCE_FONTS.map((font) => (
                             <Select.Item className="select-item" value={font.value} key={font.value}>
                               <Select.ItemText>{font.label}</Select.ItemText>
-                              <Select.ItemIndicator><CheckIcon className="pika-ui-icon" /></Select.ItemIndicator>
+                              <Select.ItemIndicator><CheckIcon /></Select.ItemIndicator>
                             </Select.Item>
                           ))}
                         </Select.Viewport>
@@ -4235,7 +4278,7 @@ export default function EditorApp() {
                     disabled={copySvgBusy || referenceNeedsEntry || !selectedExportGlyph || !group?.items[selectedExportGlyph]?.length}
                     onClick={() => { void copyCurrentSvg(); }}
                   >
-                    <CopyIcon className="pika-ui-icon" aria-hidden="true" />
+                    <CopyIcon aria-hidden="true" />
                   </IconButton>
                   <div className="save-action">
                     <button
@@ -4257,25 +4300,73 @@ export default function EditorApp() {
             </div>
 
             <div className="help-anchor" ref={helpRef}>
-              <div className="zoom-controls zoom-controls--corner" role="group" aria-label="画布缩放">
-                <IconButton label="缩小（⌘/Ctrl−）" onClick={() => setZoomClamped(zoom / 1.15)}><MinusIcon className="pika-ui-icon" /></IconButton>
-                <TooltipHint label="回到 100%（⌘/Ctrl0）">
-                  <button className="zoom-readout" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
+              <div className="corner-actions">
+                <div className="zoom-controls zoom-controls--corner" role="group" aria-label="画布缩放">
+                  <IconButton label="缩小（⌘/Ctrl−）" onClick={() => setZoomClamped(zoom / 1.15)}><MinusIcon /></IconButton>
+                  <TooltipHint label="回到 100%（⌘/Ctrl0）">
+                    <button className="zoom-readout" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
+                  </TooltipHint>
+                  <IconButton label="放大（⌘/Ctrl+）" onClick={() => setZoomClamped(zoom * 1.15)}><PlusIcon /></IconButton>
+                </div>
+                <TooltipHint label="快捷键与规矩">
+                  <button
+                    className="help-button"
+                    type="button"
+                    data-open={helpOpen}
+                    aria-expanded={helpOpen}
+                    aria-controls="editor-help"
+                    onClick={() => { setMoreOpen(false); setHelpOpen((value) => !value); }}
+                  >
+                    ?
+                  </button>
                 </TooltipHint>
-                <IconButton label="放大（⌘/Ctrl+）" onClick={() => setZoomClamped(zoom * 1.15)}><PlusIcon className="pika-ui-icon" /></IconButton>
               </div>
-              <TooltipHint label="快捷键与规矩">
-                <button
-                  className="help-button"
-                  type="button"
-                  data-open={helpOpen}
-                  aria-expanded={helpOpen}
-                  aria-controls="editor-help"
-                  onClick={() => setHelpOpen((value) => !value)}
-                >
-                  ?
-                </button>
-              </TooltipHint>
+              {/* 「更多」叠在「?」正上方，和它右对齐；卡片从这个按钮往上弹。 */}
+              <div className="more-anchor">
+                <TooltipHint label="更多">
+                  <button
+                    className="help-button more-button"
+                    type="button"
+                    data-open={moreOpen}
+                    aria-label="更多"
+                    aria-expanded={moreOpen}
+                    aria-controls="editor-more"
+                    onClick={() => { setHelpOpen(false); setMoreOpen((value) => !value); }}
+                  >
+                    <MoreMark />
+                  </button>
+                </TooltipHint>
+                {moreOpen && (
+                  <div className="more-pop" id="editor-more" role="dialog" aria-label="更多">
+                    <a className="more-link" href={SOURCE_REPO_URL} target="_blank" rel="noopener noreferrer">
+                      <span className="more-link-icon"><GithubMark /></span>
+                      <span className="more-link-text">
+                        <b>开源项目</b>
+                        <small>在 GitHub 查看 Yuragi 源码</small>
+                      </span>
+                      <ExternalMark />
+                    </a>
+                    {SKILL_DOWNLOAD_URL ? (
+                      <a className="more-link" href={SKILL_DOWNLOAD_URL} target="_blank" rel="noopener noreferrer">
+                        <span className="more-link-icon"><SkillMark /></span>
+                        <span className="more-link-text">
+                          <b>不想自己动手？</b>
+                          <small>试试 Skill，让 AI 帮你写</small>
+                        </span>
+                        <ExternalMark />
+                      </a>
+                    ) : (
+                      <div className="more-link" aria-disabled="true">
+                        <span className="more-link-icon"><SkillMark /></span>
+                        <span className="more-link-text">
+                          <b>不想自己动手？</b>
+                          <small>试试 Skill，让 AI 帮你写（即将开放）</small>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               {helpOpen && (
                 <div className="help-pop" id="editor-help" role="dialog" aria-label="快捷键与规矩">
                   <b>这是什么</b>
@@ -4386,7 +4477,7 @@ export default function EditorApp() {
                   <section className="metrics-panel" id="glyph-metrics" aria-label="逐字数据">
                     <div className="metrics-panel-head">
                       <strong>逐字数据</strong><span>{allMetrics.length} 字</span>
-                      <IconButton label="收起逐字数据" className="icon-button--square" onClick={() => setMetricsOpen(false)}><Cross2Icon className="pika-ui-icon" /></IconButton>
+                      <IconButton label="收起逐字数据" className="icon-button--square" onClick={() => setMetricsOpen(false)}><Cross2Icon /></IconButton>
                     </div>
                     <div className="metrics-scroll">
                       <table className="metrics-table">
@@ -4572,7 +4663,7 @@ export default function EditorApp() {
             className="section--library section--library-glyphs"
             open={!!openSections.libraryGlyphs}
             onOpenChange={toggleSection("libraryGlyphs")}
-            indicator={<PlusIcon className="pika-ui-icon" />}
+            indicator={<PlusIcon />}
             indicatorLabel="添加字形（单击选择，双击快速添加单字）"
             indicatorHasMenu
             indicatorAction={openBatchAddMenuFromClick}
@@ -4629,11 +4720,11 @@ export default function EditorApp() {
                         <DropdownMenu.Portal>
                             <DropdownMenu.Content className="menu-content" sideOffset={4} align="end" alignOffset={-6}>
                             <DropdownMenu.Item className="menu-item" onSelect={() => copyGlyph(name)}>
-                              <CopyIcon className="pika-ui-icon" aria-hidden="true" />
+                              <CopyIcon aria-hidden="true" />
                               <span>复制字形</span>
                             </DropdownMenu.Item>
                             <DropdownMenu.Item className="menu-item danger" disabled={names.length <= 1} onSelect={() => removeGlyph(name)}>
-                              <TrashIcon className="pika-ui-icon" aria-hidden="true" />
+                              <TrashIcon aria-hidden="true" />
                               <span>移除字形</span>
                             </DropdownMenu.Item>
                           </DropdownMenu.Content>
@@ -4805,14 +4896,14 @@ export default function EditorApp() {
                     <Select.Root value={exportScope} onValueChange={(value) => setExportScopeAndSave(value as ExportScope)}>
                       <Select.Trigger className="select-trigger export-select" aria-label="导出范围">
                         <Select.Value />
-                        <Select.Icon><ChevronDownIcon className="pika-ui-icon" /></Select.Icon>
+                        <Select.Icon><ChevronDownIcon /></Select.Icon>
                       </Select.Trigger>
                       <Select.Portal>
                         <Select.Content className="select-content export-select-content export-scope-content" position="popper" sideOffset={6}>
                           <Select.Viewport>
                             <Select.Item className="select-item" value="row">
                               <Select.ItemText>导出整段</Select.ItemText>
-                              <Select.ItemIndicator><CheckIcon className="pika-ui-icon" /></Select.ItemIndicator>
+                              <Select.ItemIndicator><CheckIcon /></Select.ItemIndicator>
                             </Select.Item>
                             <Select.Item className="select-item" value="glyphs">
                               <Select.ItemText>
@@ -4821,7 +4912,7 @@ export default function EditorApp() {
                                   ? <GlyphLabel name={selectedExportGlyph} className="export-glyph-label" />
                                   : "未选择字形"}
                               </Select.ItemText>
-                              <Select.ItemIndicator><CheckIcon className="pika-ui-icon" /></Select.ItemIndicator>
+                              <Select.ItemIndicator><CheckIcon /></Select.ItemIndicator>
                             </Select.Item>
                           </Select.Viewport>
                         </Select.Content>
@@ -4837,7 +4928,7 @@ export default function EditorApp() {
                     >
                       <Select.Trigger className="select-trigger export-select" aria-label={`导出倍率 ${exportScale}x`}>
                         <Select.Value />
-                        <Select.Icon><ChevronDownIcon className="pika-ui-icon" /></Select.Icon>
+                        <Select.Icon><ChevronDownIcon /></Select.Icon>
                       </Select.Trigger>
                       <Select.Portal>
                         <Select.Content className="select-content export-select-content export-scale-content" position="popper" sideOffset={6}>
@@ -4845,7 +4936,7 @@ export default function EditorApp() {
                             {EXPORT_SCALES.map((value) => (
                               <Select.Item className="select-item" value={value} key={value}>
                                 <Select.ItemText>{value}x</Select.ItemText>
-                                <Select.ItemIndicator><CheckIcon className="pika-ui-icon" /></Select.ItemIndicator>
+                                <Select.ItemIndicator><CheckIcon /></Select.ItemIndicator>
                               </Select.Item>
                             ))}
                           </Select.Viewport>
@@ -4856,7 +4947,7 @@ export default function EditorApp() {
                     <Select.Root value={exportFormat} onValueChange={(value) => setExportFormatAndSave(value as ExportFormat)}>
                       <Select.Trigger className="select-trigger export-select" aria-label="导出格式">
                         <Select.Value />
-                        <Select.Icon><ChevronDownIcon className="pika-ui-icon" /></Select.Icon>
+                        <Select.Icon><ChevronDownIcon /></Select.Icon>
                       </Select.Trigger>
                       <Select.Portal>
                         <Select.Content className="select-content export-select-content" position="popper" sideOffset={6}>
@@ -4864,7 +4955,7 @@ export default function EditorApp() {
                             {[{ value: "png", label: "PNG" }, { value: "svg", label: "SVG" }].map((option) => (
                               <Select.Item className="select-item" value={option.value} key={option.value}>
                                 <Select.ItemText>{option.label}</Select.ItemText>
-                                <Select.ItemIndicator><CheckIcon className="pika-ui-icon" /></Select.ItemIndicator>
+                                <Select.ItemIndicator><CheckIcon /></Select.ItemIndicator>
                               </Select.Item>
                             ))}
                           </Select.Viewport>
@@ -4879,7 +4970,7 @@ export default function EditorApp() {
                     onClick={() => void exportContent()}
                     disabled={exportBusy || (exportScope === "row" ? !rowResult?.svg : !selectedExportGlyph || !group.items[selectedExportGlyph]?.length)}
                   >
-                    <DownloadIcon className="pika-ui-icon" />
+                    <DownloadIcon />
                     <span>{exportBusy ? "导出中…" : "导出"}</span>
                   </button>
                   {exportMessage && <p className="export-message" role="status">{exportMessage}</p>}
@@ -4894,7 +4985,7 @@ export default function EditorApp() {
               <div className="section-body data-section-body">
                 <div className="export-file-row">
                   <button className="library-file-action library-file-action--download" type="button" onClick={() => downloadDocument(projectFilename)}>
-                    <ProjectFileIcon className="pika-ui-icon" aria-hidden="true" />
+                    <ProjectFileIcon aria-hidden="true" />
                     <span>下载工程文件</span>
                   </button>
                 </div>
@@ -4926,13 +5017,13 @@ export default function EditorApp() {
             style={{ left: batchAddMenu.x, top: batchAddMenu.y }}
           >
             <button className="batch-add-menu-item" type="button" role="menuitem" autoFocus onClick={addSingleGlyphFromMenu}>
-              <PlusIcon className="pika-ui-icon" aria-hidden="true" />
+              <PlusIcon aria-hidden="true" />
               <span className="batch-add-menu-copy">
                 <strong>添加单字<small>（双击）</small></strong>
               </span>
             </button>
             <button className="batch-add-menu-item" type="button" role="menuitem" onClick={openBatchAddDialog}>
-              <CopyIcon className="pika-ui-icon" aria-hidden="true" />
+              <CopyIcon aria-hidden="true" />
               <span className="batch-add-menu-copy">
                 <strong>批量添加字形</strong>
               </span>

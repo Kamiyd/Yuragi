@@ -4,6 +4,6 @@ dist/
 .DS_Store
 .vercel/
 tools/parity/fixtures.json
-reference-python/__pycache__/
+skills/hand-glyph/scripts/__pycache__/
 .env
 .env.*

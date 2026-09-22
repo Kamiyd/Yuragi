@@ -11,7 +11,7 @@ import io, json, os, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.realpath(os.path.join(HERE, "..", ".."))
-PY = os.path.join(ROOT, "reference-python")
+PY = os.path.join(ROOT, "skills", "hand-glyph", "scripts")
 sys.path.insert(0, PY)
 
 import dpath, flatten, hand as handmod, row as rowmod, vary as varymod

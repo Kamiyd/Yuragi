@@ -53,7 +53,22 @@ npm run parity:fixtures
 npm run parity
 ```
 
-`parity:fixtures` 使用 `reference-python/` 下的 Python 程序生成对照数据；应用运行和静态构建不需要 Python。
+`parity:fixtures` 使用 `skills/hand-glyph/scripts/` 下的 Python 程序生成对照数据；应用运行和静态构建不需要 Python。
+
+## Agent Skill
+
+[`skills/hand-glyph/`](skills/hand-glyph/) 是同一套手绘算法的 Python 版，打包成 agent skill，
+可以让 Claude Code、Codex 等在对话里直接画手写字 SVG。它同时是上面回归对照的基准实现，
+所以网页版和 skill 出来的是同一只手。
+
+装到本机（软链接到仓库里，改了立刻生效）：
+
+```bash
+ln -s "$PWD/skills/hand-glyph" ~/.agents/skills/hand-glyph
+ln -s ../../.agents/skills/hand-glyph ~/.claude/skills/hand-glyph
+```
+
+其他 agent 同理，把第二行的 `~/.claude/skills` 换成对应的 skill 目录。
 
 ## 开源与许可
 

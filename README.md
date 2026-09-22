@@ -61,7 +61,15 @@ npm run parity
 可以让 Claude Code、Codex 等在对话里直接画手写字 SVG。它同时是上面回归对照的基准实现，
 所以网页版和 skill 出来的是同一只手。
 
-装到本机（软链接到仓库里，改了立刻生效）：
+只想用这个 skill：
+
+```bash
+npx skills add Kamiyd/Yuragi@hand-glyph -g
+```
+
+手动安装、运行要求和用法见 [skills/hand-glyph/README.md](skills/hand-glyph/README.md)。
+
+开发时装到本机（软链接到仓库里，改了立刻生效）：
 
 ```bash
 ln -s "$PWD/skills/hand-glyph" ~/.agents/skills/hand-glyph

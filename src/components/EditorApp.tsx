@@ -208,8 +208,8 @@ const DEFAULT_INK_STYLE: InkStyle = { color: DEFAULT_INK_COLOR, opacity: DEFAULT
 const INK_FADE_MS = 220;
 const DEFAULT_VIEW_SEED = 42;
 const SOURCE_REPO_URL = "https://github.com/Kamiyd/Yuragi";
-// Skill 下载地址预留位：填上链接后「更多」卡片里的下载按钮自动可用。
-const SKILL_DOWNLOAD_URL = "";
+// hand-glyph skill 在仓库里的目录；留空时「更多」卡片里的入口显示为即将开放。
+const SKILL_DOWNLOAD_URL = "https://github.com/Kamiyd/Yuragi/tree/main/skills/hand-glyph";
 const PREVIEW_MIN_HEIGHT = 88;
 // 预览高度最多容纳约四行；更多内容在预览区内部滚动。
 const PREVIEW_MAX_HEIGHT = 248;

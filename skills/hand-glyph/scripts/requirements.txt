@@ -1,0 +1,3 @@
+# 出图（write / svg / gallery / vary / compose / lint）只用 Python 标准库，什么都不用装。
+# 下面是可选项：
+pillow>=9   # overlay.py 出 PNG；没装时 overlay.py 自动改出 SVG

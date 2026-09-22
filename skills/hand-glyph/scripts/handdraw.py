@@ -12,6 +12,13 @@
     python3 handdraw.py json    geo.json              路径 JSON，贴进代码用
     python3 handdraw.py ts      geo.json              TypeScript 模块
 
+    python3 handdraw.py write   geo.json "文字" --candidates 12 -o seeds.html
+                                                      一次看 12 个种子，挑一版再 -s 钉住
+    python3 handdraw.py compose --han han.json "中文" --latin latin.json "English" -o out.svg
+                                                      中文一行 + 英文一行合成一张透明 SVG
+    python3 handdraw.py lint    geo.json [--svg out.svg]   按检查清单自动查字库和交付物
+    python3 handdraw.py doctor                        检查 Pillow、参照字体、编辑器、缓存
+
 **真相层是几何 JSON，不是跑出来的 path。** 骨架按规规矩矩的样子画（横是平的、
 竖是直的、折角是尖的），手感由滤镜统一加。所以不要手工去改跑出来的坐标，
 也不要在几何里预先把线画歪 —— 两层抖动会互相打架。
@@ -236,6 +243,16 @@ def load(path):
     return normalize(json.load(io.open(path, encoding="utf-8")))
 
 
+def load_raw(path):
+    """write / vary / compose 用的那份字库：原始笔画 + 字库级参数。"""
+    normalized = load(path)
+    return dict({p: normalized[p] for p in PARAMS},
+                vb=normalized["vb"], sw=normalized["sw"],
+                seed=normalized.get("seed"),
+                glyphSeeds=normalized.get("glyphSeeds", {}),
+                items=normalized["raw"])
+
+
 # ── 输出 ──────────────────────────────────────────────────────────────
 def svg_markup(paths, size, vb, sw, extra=""):
     def one(p):
@@ -455,7 +472,11 @@ def cmd_write(g, text, out, seed, do_vary):
     print("写出", os.path.abspath(out))
     print("  种子 %d —— 不带 -s 的话每次跑都是新的一版。想固定这一版就 -s %d。"
           % (seed, seed))
-    print("  宽高比 %.2f。显示高度别低于 44px（汉字的尺寸下限）。" % ratio)
+    if layout_mode(g) == "latin":
+        print("  宽高比 %.2f。显示高度别低于 28px（拉丁的尺寸下限）。" % ratio)
+    else:
+        print("  宽高比 %.2f。显示高度别低于 44px（汉字的尺寸下限）。" % ratio)
+    print("  透明、currentColor —— 这就是交付物，别再往上加背景和装饰。")
 
 
 def cmd_vary(g, n, out):
@@ -501,6 +522,16 @@ CMDS = {"svg": cmd_svg, "gallery": cmd_gallery, "json": cmd_json, "ts": cmd_ts}
 
 if __name__ == "__main__":
     a = sys.argv[1:]
+    # 这三条自己解析参数，不走下面那套「第二个参数是字库」的约定
+    if a and a[0] == "compose":
+        import compose
+        sys.exit(compose.main(a[1:]))
+    if a and a[0] == "lint":
+        import lint
+        sys.exit(lint.main(a[1:]))
+    if a and a[0] == "doctor":
+        import doctor
+        sys.exit(doctor.main(a[1:]))
     if not a or (a[0] not in CMDS and a[0] not in ("edit", "write", "vary")) or len(a) < 2:
         print(__doc__)
         sys.exit(2)
@@ -514,14 +545,14 @@ if __name__ == "__main__":
         edit.serve(geo, port=port)
     elif cmd == "write":
         import random
-        normalized = normalize(json.load(io.open(geo, encoding="utf-8")))
-        raw = dict({p: normalized[p] for p in PARAMS},
-                   vb=normalized["vb"], sw=normalized["sw"],
-                   seed=normalized.get("seed"),
-                   glyphSeeds=normalized.get("glyphSeeds", {}),
-                   items=normalized["raw"])
+        raw = load_raw(geo)
+        if "--candidates" in a:            # 一次排 n 个种子，挑中了再 -s 钉住；不开编辑器
+            import candidates
+            n = int(a[a.index("--candidates") + 1])
+            start = int(a[a.index("-s") + 1]) if "-s" in a else random.randrange(1, 10 ** 5)
+            sys.exit(candidates.cmd_candidates(raw, a[2], n, start, out))
         seed = (int(a[a.index("-s") + 1]) if "-s" in a
-                else normalized.get("seed") or random.randrange(1, 10 ** 6))
+                else raw.get("seed") or random.randrange(1, 10 ** 6))
         cmd_write(raw, a[2], out, seed, "--same" not in a)
         # 排完直接把编辑器递到手上：这一版长什么样、哪个字要改，在浏览器里看着调。
         # 不想开就 --no-edit（脚本里批量跑、CI 里都该带上）。
@@ -531,12 +562,7 @@ if __name__ == "__main__":
             print()
             edit.serve(geo, port=port, row={"text": a[2], "seed": seed})
     elif cmd == "vary":
-        normalized = normalize(json.load(io.open(geo, encoding="utf-8")))
-        raw = dict({p: normalized[p] for p in PARAMS},
-                   vb=normalized["vb"], sw=normalized["sw"],
-                   seed=normalized.get("seed"),
-                   glyphSeeds=normalized.get("glyphSeeds", {}),
-                   items=normalized["raw"])
+        raw = load_raw(geo)
         cmd_vary(raw, int(a[a.index("-n") + 1]) if "-n" in a else 6, out)
     else:
         CMDS[cmd](load(geo), out)

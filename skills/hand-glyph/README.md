@@ -1,6 +1,9 @@
 # hand-glyph
 
-手写字 agent skill：让 Claude Code、Codex 等 AI 助手先画字形骨架，再用手绘滤镜写出手写风格的 SVG，
+**拙趣感手绘字** agent skill：让 Claude Code、Codex 等 AI 助手写出茶饮海报（比如喜茶）里那种拙趣的手绘字 ——
+笔画微微发抖、字有大有小、同一个字每次写得都不一样，而不是套一款固定字形的手写体字体。
+
+助手先画干净的字形骨架，再交给和 [Yuragi](../../README.md) 网页版同一套的手绘算法把「拙」写出来。
 适合标题、字标、展示用的短句。输出是透明背景、跟随页面颜色（`currentColor`）的 SVG。
 
 ## 安装

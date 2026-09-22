@@ -1,14 +1,17 @@
 ---
 name: hand-glyph
-description: Draw Chinese characters (and latin words) as hand-written SVG — wobbly single-weight centre-line strokes, round caps, currentColor, no fills. Use when someone wants a 手写字 / 手写标题 / 手绘汉字 / hand-lettered heading, a wordmark or title set in a hand made of real strokes rather than a font, or asks to redraw existing text in that style. Not for body copy — the floor is 44px.
+description: Draw Chinese characters (and latin words) as hand-written SVG with a clumsy-charm (拙趣) look — wobbly single-weight centre-line strokes, round caps, currentColor, no fills. Use when someone wants a 手写字 / 手写标题 / 手绘汉字 / 拙趣手绘字 / 喜茶风手写字 / hand-lettered heading, a wordmark or title set in a hand made of real strokes rather than a font, or asks to redraw existing text in that style. Not for body copy — the floor is 44px.
 ---
 
-# 手写字
+# 拙趣手绘字
 
 **手感不是画出来的，是过滤出来的。** 骨架按规规矩矩的样子画（横平、竖直、折角尖），
 再统一过一遍抖动滤镜。不要凭感觉去「画歪」一笔 —— 十个字之后就是十只手。
 
 **画骨架，不画轮廓。** 每一笔是一条中心线，粗细交给 `stroke-width`。
+
+**要的气质是拙趣**：像茶饮海报（喜茶那类）里的手绘字 —— 笔画不规矩、字有大有小、同一个字每次写得不一样。
+不是一款规整的手写体字体，也不是书法。拙来自滤镜和逐字变化，不来自故意画丑的骨架。
 
 ---
 

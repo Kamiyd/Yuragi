@@ -2138,6 +2138,10 @@ svg.ui-icon :is(path, rect, circle, ellipse, line, polyline, polygon) {
   transition: background .16s ease, color .16s ease;
 }
 .library-file-action:hover { background: var(--soft-strong); color: var(--ink); }
+.library-file-action:disabled { opacity: .5; cursor: default; background: var(--soft); color: var(--muted); }
+.latin-zhuo { display: flex; flex-direction: column; gap: 6px; }
+.latin-zhuo .library-file-action { flex: 0 0 auto; height: 32px; }
+.latin-zhuo-note { font-size: 11.5px; line-height: 1.5; color: var(--muted); }
 .library-file-action--danger:hover { color: var(--danger, #B4552B); }
 .library-file-action--download {
   display: flex;

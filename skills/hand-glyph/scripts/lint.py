@@ -20,7 +20,11 @@ HAN_AMP = 0.65
 W_RANGE = (0.85, 1.15)
 FACE = (7, 57)          # 汉字字面范围，允许出 2 个单位
 FACE_SLACK = 2
-MIN_FACE = 40           # 字面最长边低于它 = 没撑住格子
+# 字面大小随字（glyphs.md「字有大有小」）：不再要求每个字撑满格子，只查两头 ——
+MIN_FACE = 24           # 字面最长边低于它，多半是画错了（极简的「一」也有这么长）
+BIG_STROKES = 10        # 这么多笔以上算复杂字……
+BIG_MIN_H = 40          # ……字面高低于它，44px 上会糊
+SAME_SPREAD = 8         # 一组字字面高的最大差低于它 = 一样大，像字体
 SIDE = (1.0, 4.5)       # 拉丁左右边距，目标 2.5
 STROKE_MIN_PX = 1.6
 HAN_MIN_PX = 44
@@ -56,6 +60,7 @@ def lint_library(path, text, r):
     vb, sw = float(g["vb"]), float(g["sw"])
     print("字库 %s（%s，%d 个字形，sw %g）" % (path, "拉丁" if H.layout_mode(g) == "latin" else "汉字",
                                           len(g["items"]), sw))
+    heights = {}                                # 汉字字面高：查「一样大」用
     for name, els in g["items"].items():
         latin = bool(els) and "adv" in els[0]
         where = "「%s」" % name
@@ -89,7 +94,19 @@ def lint_library(path, text, r):
             if x0 < lo or y0 < lo or x1 > hi or y1 > hi:
                 r.warn(where, "字面 %.0f–%.0f × %.0f–%.0f 出了 7–57" % (x0, x1, y0, y1))
             if max(x1 - x0, y1 - y0) < MIN_FACE:
-                r.warn(where, "字面最长边只有 %.0f，没撑住格子" % max(x1 - x0, y1 - y0))
+                r.warn(where, "字面最长边只有 %.0f，小得不正常" % max(x1 - x0, y1 - y0))
+            if len(els) >= BIG_STROKES and y1 - y0 < BIG_MIN_H:
+                r.warn(where, "%d 笔的复杂字字面高只有 %.0f —— 复杂字要画大（≥ %d），不然 44px 上会糊"
+                       % (len(els), y1 - y0, BIG_MIN_H))
+            heights[name] = y1 - y0
+    # 一组字一样大 = 字体。有文案就查文案里那几个字，没有就查整个字库
+    group = [n for n in heights if not text or rowmod.base_name(n) in text]
+    if len(group) >= 4:
+        hs = [heights[n] for n in group]
+        if max(hs) - min(hs) < SAME_SPREAD:
+            r.warn("字面", "这 %d 个字字面高都在 %.0f–%.0f，几乎一样大 —— 手写的字有大有小："
+                   "复杂字大、简单字小，窄字窄、扁字扁（glyphs.md「字有大有小」）"
+                   % (len(group), min(hs), max(hs)))
     if H.layout_mode(g) == "latin" and any(els and "adv" not in els[0] for els in g["items"].values()):
         r.err("字库", "拉丁字库里有字形没写 adv（写在第一笔上）")
     if text:

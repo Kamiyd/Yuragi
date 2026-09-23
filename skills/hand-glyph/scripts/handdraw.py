@@ -18,10 +18,11 @@
                                                       中文一行 + 英文一行合成一张透明 SVG
     python3 handdraw.py lint    geo.json [--svg out.svg]   按检查清单自动查字库和交付物
     python3 handdraw.py doctor                        检查 Pillow、参照字体、编辑器、缓存
+    python3 handdraw.py latin-zhuo latin.json -o z.json   英文字库：规整骨架 → 拙趣版（整体变形 + 错落 2）
 
-**真相层是几何 JSON，不是跑出来的 path。** 骨架按规规矩矩的样子画（横是平的、
-竖是直的、折角是尖的），手感由滤镜统一加。所以不要手工去改跑出来的坐标，
-也不要在几何里预先把线画歪 —— 两层抖动会互相打架。
+**真相层是几何 JSON，不是跑出来的 path。** 拙画进骨架（点和小部件飘着、
+部件一大一小、折角尖，见 reference/glyphs.md「骨架要拙」），线的抖由滤镜统一加。
+所以不要手工去改跑出来的坐标，也不要在几何里把线画成波浪 —— 两层抖动会互相打架。
 
 滤镜是确定性的：同一份几何 + 同一个顺序 = 同一条路径。种子按字在字库里的
 **顺序**算，所以新字往字库的**末尾**加；插在中间会让后面所有字重抖一遍
@@ -39,6 +40,11 @@
     "over": 1.0     收笔越位倍率 —— 笔画两头探出去多少
     "jit":  1.0     排一行时的大小起伏倍率（逐字缩放/压扁/旋转/位移一起缩放）
     "vary": 1.0     骨架层重写的幅度倍率 —— 同一个字每次写得有多不一样
+另外两个排版字段（都是绝对值，不是倍率）：
+    "fit":  12      汉字**按字宽排**：字面框到字面框留这么宽。不写 = 一字一格等宽（老行为）
+    "track": 0      字距微调，加在上面那个空上；只有写了 fit 的汉字字库 write 才读它
+    "drift": 1      错落倍率（0 = 关掉 = 老行为）：字上下浮、小字往上靠或往下坐、
+                    字距忽近忽远、多行每行缩进不一样、行距放宽。不写 = 0
 
 元素类型：
     {"t":"path",   "d":"M3 12 L21 12"}
@@ -185,6 +191,32 @@ def params_of(g):
     return {k: float(g.get(k, 1.0)) for k in PARAMS}
 
 
+def fit_of(value):
+    """字库级 fit：数字 = 按字宽排、字间留这么宽；没写或写坏了 = None（一字一格）。"""
+    try:
+        return None if value is None else float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def drift_of(value):
+    """字库级 drift（错落倍率）：没写或写坏了 = 0，也就是关掉。"""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return v if v == v else 0.0
+
+
+def latin_zhuo_of(value):
+    """字库级 latinZhuo：这套英文已经按 latin-zhuo 变拙过的量；没写 = None。"""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return None
+    return v if v == v and v > 0 else None
+
+
 def seed_map(value):
     """清洗可选的逐字种子表；旧字库没有这个字段也完全兼容。"""
     if not isinstance(value, dict):
@@ -231,6 +263,8 @@ def normalize(geo):
     p = params_of(glyphs)
     glyph_seeds = seed_map(glyphs.get("glyphSeeds"))
     return dict(p, vb=vb, sw=float(glyphs.get("sw", 1.5)),
+                fit=fit_of(glyphs.get("fit")), track=float(glyphs.get("track", 0.0)),
+                drift=drift_of(glyphs.get("drift")),
                 seed=preview_seed(glyphs.get("seed")), raw=glyphs["items"],
                 glyphSeeds=glyph_seeds,
                 items={name: draw(items, rowmod.hand_seed(
@@ -248,6 +282,8 @@ def load_raw(path):
     normalized = load(path)
     return dict({p: normalized[p] for p in PARAMS},
                 vb=normalized["vb"], sw=normalized["sw"],
+                fit=normalized.get("fit"), track=normalized.get("track", 0.0),
+                drift=normalized.get("drift", 0.0),
                 seed=normalized.get("seed"),
                 glyphSeeds=normalized.get("glyphSeeds", {}),
                 items=normalized["raw"])
@@ -410,12 +446,17 @@ def write_lines(g, text, seed, do_vary=True):
             advs = {n: float(e[0].get("adv", vb)) for n, e in g["items"].items() if e}
             L, _ = rowmod.latin_layout([n or " " for n in seq], polys, advs,
                                        seed=seed + li, amp_k=p["jit"],
+                                       drift=drift_of(g.get("drift")),
                                        seed_for=lambda name, oi: item_seed(name, oi),
                                        local_for=lambda name, oi: rowmod.local_seed(glyph_seeds, name) is not None)
             for it in L:
                 it["baseline_dy"] = it["dy"]
         else:
+            # 按字宽排（fit）时字距微调 track 一起生效；一字一格的老字库照旧不读 track
+            fit = fit_of(g.get("fit"))
             L = rowmod.han_layout(seq, polys, cell=vb, seed=seed + li, amp_k=p["jit"],
+                                  fit=fit, drift=drift_of(g.get("drift")),
+                                  track=float(g.get("track", 0.0)) if fit is not None else 0.0,
                                   seed_for=lambda name, oi: item_seed(name, oi),
                                   local_for=lambda name, oi: rowmod.local_seed(glyph_seeds, name) is not None)
 
@@ -440,12 +481,15 @@ def write_lines(g, text, seed, do_vary=True):
         W = max(W, x1 - x0)
 
     pad, gap = 5.0, 7.0
+    # 错落：多行时每行缩进不一样、行距放宽（drift 0 时全是 0，SVG 跟以前一样）
+    indent, lead = rowmod.line_drift(len(blocks), seed, drift_of(g.get("drift")))
+    W = max([W] + [(b["box"][2] - b["box"][0]) + indent[bi] for bi, b in enumerate(blocks)])
     parts, y = [], pad
-    for b in blocks:
+    for bi, b in enumerate(blocks):
         x0, y0, x1, y1 = b["box"]
         parts.append('<g transform="translate(%.2f %.2f)" stroke-width="%g">%s</g>'
-                     % (pad - x0, y - y0, b["sw"], b["body"]))
-        y += (y1 - y0) + gap
+                     % (pad - x0 + indent[bi], y - y0, b["sw"], b["body"]))
+        y += (y1 - y0) + gap + (lead[bi] if bi < len(lead) else 0.0)
     H = y - gap + pad
     svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %.2f %.2f" fill="none" '
            'stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">%s</svg>'
@@ -532,6 +576,9 @@ if __name__ == "__main__":
     if a and a[0] == "doctor":
         import doctor
         sys.exit(doctor.main(a[1:]))
+    if a and a[0] == "latin-zhuo":
+        import latin_zhuo
+        sys.exit(latin_zhuo.main(a[1:]))
     if not a or (a[0] not in CMDS and a[0] not in ("edit", "write", "vary")) or len(a) < 2:
         print(__doc__)
         sys.exit(2)

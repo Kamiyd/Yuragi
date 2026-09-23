@@ -6,7 +6,7 @@
    只出现在真正改过的那几笔上。） */
 import * as dpath from "./dpath";
 import type { Segment } from "./dpath";
-import { PARAMS, TRACE_AMP, layoutMode, paramsOf, previewSeed, readMode, seedMap,
+import { PARAMS, TRACE_AMP, driftOf, fitOf, latinZhuoOf, layoutMode, paramsOf, previewSeed, readMode, seedMap,
   type GlyphItems, type LayoutMode } from "./draw";
 import type { GeoElement } from "./vary";
 import { TRACK, WORD } from "./row";
@@ -36,6 +36,12 @@ export type GlyphLibrary = {
   vary: number;
   track: number;
   word: number;
+  /** 汉字按字宽排：字面框到字面框留这么宽。null = 一字一格等宽（老字库）。 */
+  fit?: number | null;
+  /** 错落倍率：字上下浮、字距忽近忽远、多行缩进不一样。0 = 关掉（老字库）。 */
+  drift: number;
+  /** 英文已经按 latin-zhuo 变拙过的量；null = 规整版。编辑器靠它防止拙两次。 */
+  latinZhuo?: number | null;
   seed: number | null;
   glyphSeeds: Record<string, number>;
   glyphSeedMemory: Record<string, number>;
@@ -205,6 +211,9 @@ export function loadGeo(parsed: unknown, file: string): { file: string; glyphs: 
       mode: readMode(glyphs.mode),
       track: Number(glyphs.track ?? defaultTrack(glyphs)),
       word: Number(glyphs.word ?? WORD),
+      fit: fitOf(glyphs.fit),
+      drift: driftOf(glyphs.drift),
+      latinZhuo: latinZhuoOf(glyphs.latinZhuo),
       seed: previewSeed(glyphs.seed),
       glyphSeeds: seedMap(glyphs.glyphSeeds),
       glyphSeedMemory: seedMap(glyphs.glyphSeedMemory),
@@ -227,6 +236,12 @@ export function toGeoFile(glyphs: GlyphLibrary): Record<string, unknown> {
   const track = defaultTrack(glyphs);
   if (Math.abs(Number(glyphs.track ?? track) - track) > 1e-9) out.track = num(glyphs.track);
   if (Math.abs(Number(glyphs.word ?? WORD) - WORD) > 1e-9) out.word = num(glyphs.word);
+  const fit = fitOf(glyphs.fit);                 // 没写 = 一字一格，文件里也不写
+  if (fit !== null) out.fit = num(fit);
+  const drift = driftOf(glyphs.drift);          // 0 = 关掉，文件里也不写
+  if (drift) out.drift = num(drift);
+  const latinZhuo = latinZhuoOf(glyphs.latinZhuo);   // 英文已变拙：记着，防止拙两次
+  if (latinZhuo !== null) out.latinZhuo = num(latinZhuo);
   const seed = previewSeed(glyphs.seed);
   if (seed !== null) out.seed = seed;
   const seeds: Record<string, number> = {};
@@ -267,6 +282,8 @@ export function toRawLibrary(glyphs: GlyphLibrary): Record<string, unknown> & { 
     vary: glyphs.vary,
     track: glyphs.track,
     word: glyphs.word,
+    fit: glyphs.fit ?? null,
+    drift: glyphs.drift ?? 0,
     seed: glyphs.seed,
     glyphSeeds: glyphs.glyphSeeds,
     items,

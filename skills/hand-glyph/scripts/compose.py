@@ -71,6 +71,8 @@ def main(argv):
     ap.add_argument("--sub-ratio", type=float, default=1.0, help="副标题字面宽 / 主标题字面宽")
     ap.add_argument("--gap", type=float, help="两行字面之间的距离，px；默认主标题行高的 0.35")
     ap.add_argument("--no-balance", action="store_true", help="不自动平衡两行的缩放倍率")
+    ap.add_argument("--sub-weight", type=float, default=1.0,
+                    help="副标题画布上的线宽 / 主标题的，默认 1（一样粗）。英文字母比汉字小，一样粗时英文显重，可给 0.8")
     ap.add_argument("-s", "--seed", type=int, help="种子；不给就随机，跑完会打印")
     ap.add_argument("--preview", help="另出一张亮暗底的自检预览 HTML")
     ap.add_argument("-o", "--out", default="compose.svg")
@@ -107,8 +109,8 @@ def main(argv):
             main_row["k"] = min(main_row["k"], sub["k"] / MIN_K_RATIO)
             print("自动平衡：副标题放宽到 %.0f%% 画布宽，主标题收到 %.0f%%，两行线宽补偿不超过 2 倍。"
                   % (100 * sub["w"] * sub["k"] / a.width, 100 * main_row["w"] * main_row["k"] / a.width))
-        # 线宽补偿：让副标题画布上的线宽 = 主标题画布上的线宽
-        target = main_row["g"]["sw"] * mean_w(main_row["g"], main_row["text"]) * main_row["k"]
+        # 线宽补偿：让副标题画布上的线宽 = 主标题画布上的线宽 × --sub-weight
+        target = main_row["g"]["sw"] * mean_w(main_row["g"], main_row["text"]) * main_row["k"] * a.sub_weight
         sw = target / (mean_w(sub["g"], sub["text"]) * sub["k"])
         ratio = sw / sub["g"]["sw"]
         if abs(ratio - 1) > 1e-9:

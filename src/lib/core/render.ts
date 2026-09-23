@@ -4,7 +4,7 @@
    **render_row 的每一步都照抄 handdraw.write_lines 的单行分支** —— 种子怎么算、
    重写在哪一层、摆正拿哪份几何，全一样。所以同一个种子下，每个自动换行后的
    子行仍然就是 `write` 出的一行，不是「差不多的一行」。改动这个函数时对着那边一起改。 */
-import { draw, pathMarkup, paramsOf, seedMap, type RenderPath } from "./draw";
+import { draw, driftOf, fitOf, pathMarkup, paramsOf, seedMap, type RenderPath } from "./draw";
 import { pathToPolys, type Poly } from "./flatten";
 import { fmtFixed, pyG, pyRound } from "./num";
 import * as rowmod from "./row";
@@ -106,14 +106,14 @@ export function renderRow(options: RowOptions): RowResult {
     let layout: rowmod.LayoutItem[];
     if (mode === "latin") {
       [layout] = rowmod.latinLayout(seq.map((n) => n ?? " "), polys, advs, {
-        seed: seed + lineIndex, ampK: ampk, track, word,
+        seed: seed + lineIndex, ampK: ampk, track, word, drift: driftOf(g.drift),
         seedFor: (name) => itemSeed(name),
         localFor: (name) => rowmod.localSeed(glyphSeeds, name) !== null,
       });
       for (const it of layout) it.baseline_dy = it.dy;
     } else {
       layout = rowmod.hanLayout(seq, polys, {
-        cell: vb, seed: seed + lineIndex, ampK: ampk, track,
+        cell: vb, seed: seed + lineIndex, ampK: ampk, track, fit: fitOf(g.fit), drift: driftOf(g.drift),
         seedFor: (name) => itemSeed(name),
         localFor: (name) => rowmod.localSeed(glyphSeeds, name) !== null,
       });
@@ -212,22 +212,24 @@ export function renderRow(options: RowOptions): RowResult {
     const [, y0, , y1] = line.box;
     return Math.max(1, (y1 - y0) + 2 * pad);
   }));
+  // 错落：跟 write 同一个 lineDrift —— 每行缩进不一样、行距放宽（drift 0 时全是 0）
+  const [indent, lead] = rowmod.lineDrift(lines.length, seed, driftOf(g.drift));
   let width = 0;
   let y = pad;
   const parts: string[] = [];
-  for (const { rendered: line } of lines) {
+  lines.forEach(({ rendered: line }, li) => {
     const [x0, y0, x1, y1] = line.box;
     const lineVbw = (x1 - x0) + 2 * pad;
     const lineVbh = (y1 - y0) + 2 * pad;
     const scale = lineUnit / lineVbh;
-    width = Math.max(width, lineVbw * scale);
-    const lineTransform = `translate(${fmtFixed(pad - (x0 - pad) * scale, 2)} `
+    width = Math.max(width, lineVbw * scale + indent[li]);
+    const lineTransform = `translate(${fmtFixed(pad - (x0 - pad) * scale + indent[li], 2)} `
       + `${fmtFixed(y - (y0 - pad) * scale, 2)}) scale(${fmtFixed(scale, 4)})`;
     for (const glyph of line.glyphs) {
       parts.push(`<g transform="${lineTransform} ${glyph.transform}">${glyph.body}</g>`);
     }
-    y += lineUnit + 7.0;
-  }
+    y += lineUnit + 7.0 + (li < lead.length ? lead[li] : 0.0);
+  });
   const height = y - 7.0 + pad;
   const vbw = width + 2 * pad;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${fmtFixed(vbw, 2)} ${fmtFixed(height, 2)}" `

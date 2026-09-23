@@ -43,6 +43,8 @@ BODY = 2.0       # 整字重心。注意：走 row.py 排版时这一项大半�
                  # （摆正就是把字面中心拉回格心）—— 那是对的，一行字里的位置
                  # 抖动该由排版层出（可控），不该由骨架层出。单独渲一个字时它才显形。
 EPS = 2.0        # 判定「连在一起」的距离
+SHORT_T = 0.25   # 自由端沿切线的伸缩不超过这一段长度的这么多：点、钩、短撇两头一缩就没了
+                 # （实测 5 长的点按原幅度重写，200 次里消失 4 次）。长于 FREE_T/SHORT_T 的笔画不受影响
 
 
 def rnd(*key):
@@ -288,7 +290,10 @@ def _vary_once(items, seed, cell=64, amp=1.0):
                 dx, dy = 1.0, 0.0
             L = math.hypot(dx, dy) or 1.0
             tx, ty = dx / L, dy / L
-            a_t = jit((FREE_T if free else JOINT * 0.6) * amp * k, seed, 17, si, gi)
+            t_amp = (FREE_T if free else JOINT * 0.6) * amp * k
+            if free and len(an) > 1:
+                t_amp = min(t_amp, SHORT_T * L)      # 短笔两头最多各缩四分之一
+            a_t = jit(t_amp, seed, 17, si, gi)
             a_n = jit((FREE_N if free else JOINT * 0.4) * amp * k, seed, 19, si, gi)
             disp[key] = (tx * a_t - ty * a_n, ty * a_t + tx * a_n)
 

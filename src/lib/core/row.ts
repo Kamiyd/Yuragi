@@ -8,7 +8,7 @@
 import type { Point } from "./dpath";
 import type { Poly } from "./flatten";
 import { fmtFixed } from "./num";
-import { jit } from "./rng";
+import { jit, rnd } from "./rng";
 
 export const PUNCT = new Set("，。？！、～…—·,.?!".split(""));
 
@@ -18,6 +18,17 @@ export const BASELINE = 48.0;  // 拉丁基线
 const DEAD = 1.5;              // 摆正死区
 const CAP = 5.0;               // 摆正拉回量上限
 const ROT = 1.5;               // 逐字旋转，度
+const FIT_BLANK = 0.4;         // 按字宽排时，空格 / 缺字占的宽（格宽的倍数）
+// 错落（字库级 drift，0 = 关掉 = 老行为）：drift=1 时的幅度，64 网格。跟 row.py 同一组数
+const DRIFT_Y = 2.5;           // 逐字上下再多浮这么多
+const DRIFT_REF_H = 46.0;      // 大字的字面高；比它矮的算小字，可以往上靠或往下坐
+const DRIFT_SMALL = 0.8;       // 小字最多挪到「跟大字顶 / 底对齐」的这个比例
+const DRIFT_GAP = 3.0;         // 字距浮动
+const DRIFT_INDENT = 16.0;     // 多行：每行往右缩进 0 到这么多
+const DRIFT_LEAD = 9.0;        // 多行：行距在原来 7 的基础上再加这么多
+const DRIFT_LEAD_JIT = 2.0;    // 多行：行距再浮一点
+const DRIFT_Y_LAT = 1.8;       // 拉丁：每个字母的基线再上下浮这么多
+const DRIFT_GAP_LAT = 2.0;     // 拉丁：字母之间的空再浮这么多
 
 export type PolysOf = (name: string | null, index: number) => Poly[];
 export type SeedFor = (name: string | null, index: number) => number;
@@ -36,6 +47,8 @@ export type LayoutItem = {
   ax?: number;
   ay?: number;
   adv?: number;
+  /** 拉丁错落：这个字母的基线上下浮了多少。 */
+  bob?: number;
   x?: number;
   dy?: number;
   baseline_dy?: number;
@@ -154,13 +167,21 @@ export type HanLayoutOptions = {
   seedFor?: SeedFor | null;
   localFor?: LocalFor | null;
   track?: number;
+  /** 按字宽排：字面框到字面框留这么宽（再加 track）。null / 不传 = 一字一格等宽。 */
+  fit?: number | null;
+  /** 错落倍率：字上下浮、小字往上靠或往下坐、字距忽近忽远。0 / 不传 = 关掉。 */
+  drift?: number;
 };
 
-/** 汉字：一字一格。返回每个字的 transform 和实际占位框。 */
+/** 汉字：一字一格；给了 fit 就按字宽排。返回每个字的 transform 和实际占位框。
+    跟 row.py 的 han_layout 逐行对应 —— 字有大有小、宽窄随字之后，等宽格子会让窄字、
+    小字两边空出一大块，手写的字距是跟着字宽走的。 */
 export function hanLayout(names: Array<string | null>, polysOf: PolysOf,
                           options: HanLayoutOptions = {}): LayoutItem[] {
-  const { cell = 64, seed = 0, ampK = 1, punct = PUNCT, seedFor = null, localFor = null, track = 0 } = options;
+  const { cell = 64, seed = 0, ampK = 1, punct = PUNCT, seedFor = null, localFor = null, track = 0,
+    fit = null, drift = 0 } = options;
   const out: LayoutItem[] = [];
+  let x = 0;                                        // 按字宽排时，下一个字的左边
   // 邻字间距约束参考全局种子的基准尺寸。这样局部重摇一个字时，
   // 不会因为 prev_s 被改写而把后面的字也连带换一版。
   let prevRefS: number | null = null;
@@ -173,6 +194,7 @@ export function hanLayout(names: Array<string | null>, polysOf: PolysOf,
     let face: [number, number, number, number];
     if (polys.length && !isPunct) {
       [ax, ay, face] = align(polys, cell);
+      if (fit !== null) ax = (face[0] + face[2]) / 2;  // 横向按真实字面排，字距才量得准
     } else {
       const [x0, y0, x1, y1] = polys.length ? bbox(polys) : [0, 0, cell, cell];
       ax = (x0 + x1) / 2;
@@ -194,8 +216,33 @@ export function hanLayout(names: Array<string | null>, polysOf: PolysOf,
     const sx = s * (1 + f);
     const sy = s * (1 - f);
     const rot = jit(ROT * ampK, i, itemSeed, 43);
-    const cx = (cell + track) * i + cell / 2 + jit(1.1 * ampK, i, itemSeed, 7);
-    const cy = cell / 2 + jit(1.1 * ampK, i, itemSeed, 29);
+    let cx: number;
+    if (fit === null) {
+      cx = (cell + track) * i + cell / 2 + jit(1.1 * ampK, i, itemSeed, 7);
+      if (drift) cx += jit(DRIFT_GAP * drift, i, itemSeed, 53);
+    } else {
+      let w: number;
+      if (polys.length) {
+        const t = rot * (Math.PI / 180);                // 跟 Python 的 math.radians 同一个算法
+        const fw = (face[2] - face[0]) * sx;
+        const fh = (face[3] - face[1]) * sy;
+        w = Math.abs(fw * Math.cos(t)) + Math.abs(fh * Math.sin(t));   // 转过之后的占宽
+      } else {
+        w = cell * FIT_BLANK;
+      }
+      cx = x + w / 2 + jit(1.1 * ampK, i, itemSeed, 7);
+      let gap = fit + track;
+      if (drift) gap = Math.max(gap + jit(DRIFT_GAP * drift, i, itemSeed, 53), 0.5 * gap);
+      x += w + gap;
+    }
+    let cy = cell / 2 + jit(1.1 * ampK, i, itemSeed, 29);
+    if (drift) {
+      cy += jit(DRIFT_Y * drift, i, itemSeed, 31);
+      if (polys.length && !isPunct) {                  // 小字：往上靠或往下坐
+        const slack = Math.max(0.0, (DRIFT_REF_H - (face[3] - face[1]) * sy) / 2);
+        cy += jit(slack * DRIFT_SMALL * drift, i, itemSeed, 37);
+      }
+    }
     out.push({
       name, sx, sy, rot, cx, cy, ax, ay, face, s,
       tf: `translate(${fmtFixed(cx, 2)} ${fmtFixed(cy, 2)}) rotate(${fmtFixed(rot, 2)}) `
@@ -213,6 +260,8 @@ export type LatinLayoutOptions = {
   word?: number;
   seedFor?: SeedFor | null;
   localFor?: LocalFor | null;
+  /** 错落倍率：字母基线上下浮、字母间的空忽近忽远。0 / 不传 = 关掉。 */
+  drift?: number;
 };
 
 const DESCENDERS = new Set([",", ".", "y", "g", "p", "q", "j"]);
@@ -222,7 +271,7 @@ export function latinLayout(names: Array<string | null>, polysOf: PolysOf,
                             advs: Record<string, number>,
                             options: LatinLayoutOptions = {}): [LayoutItem[], number] {
   const { seed = 0, ampK = 1, baseline = BASELINE, track = TRACK, word = WORD,
-          seedFor = null, localFor = null } = options;
+          seedFor = null, localFor = null, drift = 0 } = options;
   const out: LayoutItem[] = [];
   let x = 0;
   let prevRefS: number | null = null;
@@ -244,18 +293,31 @@ export function latinLayout(names: Array<string | null>, polysOf: PolysOf,
     const sx = s * (1 + f);
     const sy = s * (1 - f);
     const rot = jit(ROT * ampK, i, itemSeed, 43);
+    const bob = drift ? jit(DRIFT_Y_LAT * drift, i, itemSeed, 33) : 0.0;
     out.push({
-      name, source_index: i, sx, sy, rot, adv, x, dy, face: [x0, y0, x1, y1], s,
-      tf: `translate(${fmtFixed(x + (adv * sx) / 2, 2)} ${fmtFixed(baseline, 2)}) rotate(${fmtFixed(rot, 2)}) `
+      name, source_index: i, sx, sy, rot, adv, x, dy, face: [x0, y0, x1, y1], s, bob,
+      tf: `translate(${fmtFixed(x + (adv * sx) / 2, 2)} ${fmtFixed(baseline + bob, 2)}) rotate(${fmtFixed(rot, 2)}) `
         + `scale(${fmtFixed(sx, 4)} ${fmtFixed(sy, 4)}) `
         + `translate(${fmtFixed(-adv / 2, 2)} ${fmtFixed(dy - baseline, 2)})`,
     });
     x += adv * sx + track;
+    if (drift) x += jit(DRIFT_GAP_LAT * drift, i, itemSeed, 57);   // 字母间的空忽近忽远
   });
   return [out, x - track];
 }
 
 /** 把每个字的 transform 算一遍，取整行的真实包围盒。 */
+/** 多行的错落：每行缩进（已归一，最小的那行是 0）和每两行之间多加的行距。跟 row.py 的 line_drift 一样。 */
+export function lineDrift(n: number, seed: number, drift: number): [number[], number[]] {
+  if (!drift || n < 1) return [new Array(Math.max(n, 0)).fill(0), new Array(Math.max(n - 1, 0)).fill(0)];
+  const ind: number[] = [];
+  for (let li = 0; li < n; li += 1) ind.push(rnd(li, seed, 71) * DRIFT_INDENT * drift);
+  const lo = Math.min(...ind);
+  const lead: number[] = [];
+  for (let li = 0; li < n - 1; li += 1) lead.push(DRIFT_LEAD * drift + jit(DRIFT_LEAD_JIT * drift, li, seed, 73));
+  return [ind.map((v) => v - lo), lead];
+}
+
 export function bounds(layout: LayoutItem[], polysOf: PolysOf, cell = 64): [number, number, number, number] {
   let X0 = 1e9;
   let Y0 = 1e9;
@@ -282,7 +344,7 @@ export function bounds(layout: LayoutItem[], polysOf: PolysOf, cell = 64): [numb
           const ux = (px - (g.adv as number) / 2) * g.sx;
           const uy = (py + (g.dy as number) - BASELINE) * g.sy;
           X = (g.x as number) + ((g.adv as number) * g.sx) / 2 + ux * ct - uy * st;
-          Y = BASELINE + ux * st + uy * ct;
+          Y = BASELINE + (g.bob ?? 0.0) + ux * st + uy * ct;
         }
         X0 = Math.min(X0, X); X1 = Math.max(X1, X);
         Y0 = Math.min(Y0, Y); Y1 = Math.max(Y1, Y);

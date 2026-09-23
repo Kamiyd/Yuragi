@@ -14,7 +14,7 @@ ROOT = os.path.realpath(os.path.join(HERE, "..", ".."))
 PY = os.path.join(ROOT, "skills", "hand-glyph", "scripts")
 sys.path.insert(0, PY)
 
-import dpath, flatten, hand as handmod, row as rowmod, vary as varymod
+import dpath, flatten, hand as handmod, row as rowmod, vary as varymod, latin_zhuo
 import handdraw as H
 import edit
 
@@ -111,6 +111,21 @@ def fixture():
                                    "out": [e.get("d") for e in varied]})
     out["vary"] = vary_cases
 
+    # 4c. 英文变拙：规整字母 -> 拙趣版（编辑器的「英文变拙」按钮跟 latin-zhuo 命令必须一模一样）
+    import copy
+    lz_cases = []
+    for lib in ("latin-compact.json", "latin-round.json", "latin-open.json", "han-latin-sample.json"):
+        data = load_raw(lib)
+        items = data.get("items", data)
+        for name, els in items.items():
+            if not els or "adv" not in els[0]:
+                continue
+            for amount in (1.0, 0.6):
+                res = latin_zhuo.zhuo_letter(name, copy.deepcopy(els), amount)
+                lz_cases.append({"lib": lib, "name": name, "amount": amount,
+                                 "out": [e.get("d") for e in res], "adv": res[0].get("adv")})
+    out["latin_zhuo"] = lz_cases
+
     # 5. 结构不变量
     structure_cases = []
     for lib in LIBS:
@@ -178,6 +193,18 @@ def fixture():
         {"g": latin, "lib": "latin-round.json", "text": "ss", "seed": 9, "mode": "latin",
          "glyph_seeds": {"s": 4}},
         {"g": latin, "lib": "latin-round.json", "text": "Hand", "seed": 9, "mode": "han"},
+        # 按字宽排（fit）：字有大有小，字距跟着字宽走
+        {"g": dict(glyphs, fit=12), "lib": "han-sample.json", "text": "杨枝甘露茶", "seed": 3,
+         "mode": "han", "fit": 12},
+        {"g": dict(glyphs, fit=6.5), "lib": "han-sample.json", "text": "我和 我，", "seed": 11,
+         "mode": "han", "fit": 6.5, "track": 3, "ampk": 1.6},
+        # 错落（drift）：字上下浮、小字往上靠或往下坐、字距忽近忽远
+        {"g": dict(glyphs, fit=12, drift=1), "lib": "han-sample.json", "text": "杨枝甘露茶", "seed": 5,
+         "mode": "han", "fit": 12, "drift": 1},
+        {"g": dict(glyphs, drift=1.4), "lib": "han-sample.json", "text": "我和，我", "seed": 2,
+         "mode": "han", "drift": 1.4},
+        {"g": dict(latin, drift=1), "lib": "latin-round.json", "text": "Hand glyph.", "seed": 9,
+         "mode": "latin", "drift": 1},
     ):
         g = case["g"]
         row = edit.render_row(
@@ -191,8 +218,9 @@ def fixture():
 
     # 6c. 自动换行：预览按渲染后的实际宽高折行，多行共用一个 viewBox
     wrap_cases = []
-    for lib in ("han-sample.json", "latin-compact.json"):
-        glyphs = geo_payload(lib)["glyphs"]
+    for lib, extra in (("han-sample.json", {}), ("latin-compact.json", {}),
+                       ("han-sample.json", {"fit": 12, "drift": 1})):
+        glyphs = dict(geo_payload(lib)["glyphs"], **extra)
         names = list(glyphs["items"])
         mode = "latin" if lib.startswith("latin") else "han"
         text = "我和我和我和我" if lib == "han-sample.json" else "".join(names[:7])
@@ -201,23 +229,32 @@ def fixture():
                                   glyphs["amp"], glyphs["over"], True, glyphs["vary"],
                                   glyphs["glyphSeeds"], glyphs, glyphs["track"],
                                   glyphs["word"], max_width, 44.0)
-            wrap_cases.append({"lib": lib, "text": text, "mode": mode,
+            wrap_cases.append({"lib": lib, "text": text, "mode": mode, **extra,
                                "maxWidth": max_width, "result": row})
     out["row_wrap"] = wrap_cases
 
     # 7. write（多行、含 / 断行）
     write_cases = []
-    for lib, text in (("han-sample.json", "我和/和我"), ("han-sample.json", "我和"),
-                      ("latin-compact.json", "Hand/glyphs")):
-        normalized = H.normalize(load_raw(lib))
+    for lib, text, fit in (("han-sample.json", "我和/和我", None), ("han-sample.json", "我和", None),
+                           ("latin-compact.json", "Hand/glyphs", None),
+                           ("han-sample.json", "杨枝甘露/特调茶", 12),
+                           ("han-sample.json", "杨枝甘露/特调茶/我和", "drift"),
+                           ("latin-compact.json", "Hand/glyphs", "drift")):
+        data = load_raw(lib)
+        if fit == "drift":
+            data = dict(data, fit=12, drift=1)
+        elif fit is not None:
+            data = dict(data, fit=fit, track=2)
+        normalized = H.normalize(data)
         raw = dict({p: normalized[p] for p in H.PARAMS},
                    vb=normalized["vb"], sw=normalized["sw"],
+                   fit=normalized["fit"], track=normalized["track"], drift=normalized["drift"],
                    seed=normalized.get("seed"),
                    glyphSeeds=normalized.get("glyphSeeds", {}),
                    items=normalized["raw"])
         for seed in (7, 99):
             svg, ratio = H.write_lines(raw, text, seed, True)
-            write_cases.append({"lib": lib, "text": text, "seed": seed,
+            write_cases.append({"lib": lib, "text": text, "seed": seed, "fit": fit,
                                 "svg": svg, "ratio": ratio})
     out["write"] = write_cases
 

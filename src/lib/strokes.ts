@@ -638,12 +638,17 @@ export type StrokeStyle = {
   roundedRatio: number;
 };
 
-/** 没有足够样本时使用中性基线，不依赖任何内置或测试字库。 */
+/**
+ * 没有足够样本时使用中性基线，不依赖任何内置或测试字库。
+ *
+ * 折角默认写尖：圆角比例 0.1，低于落圆角的门槛 0.3。拙趣字（喜茶那类）的折几乎都是
+ * 硬折，统一 r≈2.5 的圆角是圆体字的特征。字库里攒够了圆角样本，照样会学成圆的。
+ */
 export const BASE_STYLE: StrokeStyle = {
   hengTilt: 0,
   shuTilt: 0,
   cornerRadius: 2.5,
-  roundedRatio: 0.35,
+  roundedRatio: 0.1,
 };
 
 type StyleAccumulator = {
@@ -746,8 +751,12 @@ export function learnStrokeStyle(
 
 const AXIS_SNAP = 9;        // 纯几何吸附：接近水平/垂直就拉正
 const AXIS_SNAP_NAMED = 17; // 已经认出是横/竖，可以放宽
+/* 拙趣字的横「基本平」：两端高差 0.5–1.5，往上往下都有；竖可以略斜。
+   所以不再拉成完全水平 / 垂直 —— 手描出来的那点斜留着，只把斜过头的压回这个角度。 */
+const TILT_HENG = 2.5;      // 横最多斜这么多（度）
+const TILT_SHU = 2.0;       // 竖最多偏这么多（度）
 
-function axisTargetFor(spec: PartSpec | null, dir: number, style: StrokeStyle): number | null {
+function axisTargetFor(spec: PartSpec | null, dir: number): number | null {
   const named = spec ? Math.min(
     Math.abs(angleDelta(spec.dir, 0)),
     Math.abs(angleDelta(spec.dir, 180)),
@@ -755,15 +764,12 @@ function axisTargetFor(spec: PartSpec | null, dir: number, style: StrokeStyle): 
     Math.abs(angleDelta(spec.dir, -90)),
   ) < 7 : false;
   const tol = named ? AXIS_SNAP_NAMED : AXIS_SNAP;
-  const candidates: [number, number][] = [
-    [0, style.hengTilt],
-    [180, 180 - style.hengTilt],
-    [90, 90 + style.shuTilt],
-    [-90, -90 + style.shuTilt],
-  ];
-  for (const [axis, target] of candidates) {
-    if (Math.abs(angleDelta(axis, dir)) <= tol) {
-      return Math.abs(angleDelta(axis, target)) < 0.4 ? axis : target;
+  const candidates: [number, number][] = [[0, TILT_HENG], [180, TILT_HENG], [90, TILT_SHU], [-90, TILT_SHU]];
+  for (const [axis, limit] of candidates) {
+    const off = angleDelta(axis, dir);
+    if (Math.abs(off) <= tol) {
+      // 几乎正的就写正（出 H / V）；斜了就保留手描的斜度，但不超过 limit。
+      return Math.abs(off) < 0.4 ? axis : axis + Math.max(-limit, Math.min(limit, off));
     }
   }
   return null;
@@ -891,7 +897,7 @@ function buildPieces(parts: Part[], match: Match | null, style: StrokeStyle, tot
       };
     }
     let unit = part.unit;
-    const target = axisTargetFor(spec, angleDeg(part.a, part.b), style);
+    const target = axisTargetFor(spec, angleDeg(part.a, part.b));
     if (target !== null) {
       const radians = target * Math.PI / 180;
       unit = [Math.cos(radians), Math.sin(radians)];
@@ -999,6 +1005,235 @@ function segmentsFromPieces(pieces: Piece[], joints: Joint[], sampled: Point[], 
   return segs;
 }
 
+/* ────────────────────────── 拙趣写法 ────────────────────────── */
+
+const HOOK_MAX = 5;           // 钩最长这么多（vb=64）。喜茶的钩只剩一个小勾
+const STRAIGHTEN = 0.5;       // 撇捺的弧度收掉这么多（控制点往弦上收的比例）
+const STRAIGHTEN_TEMPLATES = new Set(["撇", "捺", "平捺"]);
+
+/** 每一段的实际起点和终点（H / V 按当前游标补全）。 */
+function segmentEnds(segs: Segment[]): Array<[Point, Point]> {
+  const out: Array<[Point, Point]> = [];
+  let cursor: Point = [0, 0];
+  for (const segment of segs) {
+    const list = segment.p || [];
+    const end = list[list.length - 1];
+    if (!end) { out.push([cursor, cursor]); continue; }
+    let next: Point = [end[0], end[1]];
+    if (segment.c === "H") next = [end[0], cursor[1]];
+    if (segment.c === "V") next = [cursor[0], end[1]];
+    out.push([segment.c === "M" ? next : cursor, next]);
+    cursor = next;
+  }
+  return out;
+}
+
+/** 把一段的终点挪到 to（from 是这一段的起点）。H / V 挪完还水平 / 垂直就保留，挪歪了才降成 L；Q / C 的控制点不动。 */
+function moveSegmentEnd(segment: Segment, from: Point, to: Point) {
+  if (segment.c === "H" && Math.abs(to[1] - from[1]) < 0.05) { segment.p = [[to[0], from[1]]]; return; }
+  if (segment.c === "V" && Math.abs(to[0] - from[0]) < 0.05) { segment.p = [[from[0], to[1]]]; return; }
+  if (segment.c === "H" || segment.c === "V") {
+    segment.c = "L";
+    segment.p = [to];
+    return;
+  }
+  segment.p[segment.p.length - 1] = to;
+}
+
+/** 钩收短：最后一段是钩，长过 HOOK_MAX 就往自己的起点收。「卧钩」不收 —— 心的钩关系到认字。 */
+function shortenHook(segs: Segment[], limit: number): boolean {
+  if (segs.length < 3) return false;
+  const [start, end] = segmentEnds(segs)[segs.length - 1];
+  const length = dist(start, end);
+  if (length <= limit) return false;
+  const k = limit / length;
+  const last = segs[segs.length - 1];
+  if (last.c === "H" || last.c === "V" || last.c === "L") {
+    moveSegmentEnd(last, start, roundPoint(lerpPoint(start, end, k)));
+  } else {
+    last.p = last.p.map((point) => roundPoint(lerpPoint(start, point, k)));
+  }
+  return true;
+}
+
+/** 撇捺拉直：C 段的两个控制点往弦上收，弓得没那么厉害。 */
+function straightenCurves(segs: Segment[], amount: number): boolean {
+  const ends = segmentEnds(segs);
+  let changed = false;
+  segs.forEach((segment, index) => {
+    if (segment.c !== "C" || segment.p.length < 3) return;
+    const [a, b] = ends[index];
+    const length = dist(a, b);
+    if (length < 1e-6) return;
+    const unit: Point = [(b[0] - a[0]) / length, (b[1] - a[1]) / length];
+    for (let i = 0; i < 2; i += 1) {
+      const onChord = projectOnLine(a, unit, segment.p[i]);
+      segment.p[i] = roundPoint(lerpPoint(segment.p[i], onChord, amount));
+    }
+    changed = true;
+  });
+  return changed;
+}
+
+/* ────────────────────────── 端点吸附 ────────────────────────── */
+
+// 64 网格上的距离，其它网格按 vb/64 等比。
+const SNAP_JOIN = 2.5;        // 端点离别的笔不到它：落到那一笔的中心线上，接准
+const SNAP_TRIM = 3;          // 端点穿过别的笔不到它：截在交点上，不出头
+const SNAP_FLOAT = 4;         // 离别的笔 SNAP_JOIN–它之间：看着像挨着又像没挨着，推开
+const FLOAT_TARGET = 4.5;     // 推开到这么远（中心线；线宽两头吃掉 2.8，剩下的才是白）
+const DOT_MAX = 8;            // 整笔短于它按「点」处理：整笔平移浮开，不挨着
+
+export type SnapResult = {
+  segs: Segment[];
+  /** 接上 / 截掉出头 / 推开浮起的端点数。 */
+  joined: number;
+  trimmed: number;
+  floated: number;
+};
+
+function nearestOn(point: Point, lines: Point[][]): { d: number; q: Point } {
+  let best = { d: Infinity, q: point as Point };
+  for (const line of lines) {
+    for (let i = 1; i < line.length; i += 1) {
+      const a = line[i - 1];
+      const b = line[i];
+      const dx = b[0] - a[0];
+      const dy = b[1] - a[1];
+      const l2 = dx * dx + dy * dy;
+      const t = l2 ? Math.max(0, Math.min(1, ((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / l2)) : 0;
+      const q: Point = [a[0] + dx * t, a[1] + dy * t];
+      const d = dist(point, q);
+      if (d < best.d) best = { d, q };
+    }
+  }
+  return best;
+}
+
+/** 线段 a→b 跟别的笔的交点里，离 b 最近的那个（沿 a→b 的比例 t 最大）。 */
+function lastCrossing(a: Point, b: Point, lines: Point[][]): Point | null {
+  let best: { t: number; x: Point } | null = null;
+  const rx = b[0] - a[0];
+  const ry = b[1] - a[1];
+  for (const line of lines) {
+    for (let i = 1; i < line.length; i += 1) {
+      const c = line[i - 1];
+      const sx = line[i][0] - c[0];
+      const sy = line[i][1] - c[1];
+      const denominator = rx * sy - ry * sx;
+      if (Math.abs(denominator) < 1e-9) continue;
+      const t = ((c[0] - a[0]) * sy - (c[1] - a[1]) * sx) / denominator;
+      const u = ((c[0] - a[0]) * ry - (c[1] - a[1]) * rx) / denominator;
+      if (t <= 0 || t >= 1 || u < 0 || u > 1) continue;
+      if (!best || t > best.t) best = { t, x: [a[0] + rx * t, a[1] + ry * t] };
+    }
+  }
+  return best ? best.x : null;
+}
+
+/**
+ * 端点吸附：新描的一笔跟字里已有的笔怎么接。
+ *
+ * 拙趣字的规矩是「主干交接接准、一处不出头；点和小部件浮开 4–6」。手描出来的端点
+ * 总是差一点：多出一截小尾巴、差一两个单位没碰上、或者离得不远不近看不出是接还是
+ * 不接。这里替手表个态：
+ *   - 穿过别的笔不到 SNAP_TRIM → 截在交点上
+ *   - 离别的笔不到 SNAP_JOIN   → 落到那一笔的中心线上
+ *   - 离别的笔在 SNAP_JOIN–SNAP_FLOAT 之间 → 沿自己往回收，推到 FLOAT_TARGET
+ *   - 整笔很短（点）→ 不接，只浮：整笔平移到离别的笔 FLOAT_TARGET
+ *
+ * @param segs   新的一笔（画布坐标）
+ * @param others 这个字里已有的笔
+ * @param dot    识别成点 / 左点：只浮开，不接
+ */
+export function snapEnds(segs: Segment[], others: Segment[][], vb: number, dot = false): SnapResult | null {
+  const k = (vb || NORM_VB) / NORM_VB;
+  const lines = others.map((other) => flattenSegments(other)).filter((line) => line.length >= 2);
+  if (!lines.length || segs.length < 2) return null;
+  const out: Segment[] = segs.map((segment) => ({ ...segment, p: segment.p.map(([x, y]) => [x, y] as Point) }));
+  const result: SnapResult = { segs: out, joined: 0, trimmed: 0, floated: 0 };
+
+  const own = flattenSegments(out);
+  if (own.length < 2) return null;
+
+  if (dot || polylineLength(own) < DOT_MAX * k) {
+    // 点：整笔平移，离别的笔推到 FLOAT_TARGET。
+    let gap = Infinity;
+    let from: Point = own[0];
+    let to: Point = own[0];
+    for (const point of own) {
+      const near = nearestOn(point, lines);
+      if (near.d < gap) { gap = near.d; from = near.q; to = point; }
+    }
+    if (gap >= SNAP_FLOAT * k || gap < 1e-6) return null;
+    const push = FLOAT_TARGET * k - gap;
+    const ux = (to[0] - from[0]) / gap;
+    const uy = (to[1] - from[1]) / gap;
+    // 整笔平移：H / V 存的坐标跟游标一起平移，照样成立。
+    for (const segment of out) {
+      segment.p = segment.p.map(([x, y]) => roundPoint([x + ux * push, y + uy * push]));
+    }
+    result.floated = 1;
+    return result;
+  }
+
+  for (const which of ["start", "end"] as const) {
+    const pts = flattenSegments(out);
+    const tip = which === "start" ? pts[0] : pts[pts.length - 1];
+    const inner = which === "start" ? pts[1] : pts[pts.length - 2];
+    const write = (point: Point) => {
+      const rounded = roundPoint(point);
+      if (which === "start") {
+        const [oldStart] = segmentEnds(out)[0];
+        out[0].p = [rounded];
+        // 起点挪了，紧跟的 H / V 只在真的不再水平 / 垂直时才按原终点降成 L。
+        const next = out[1];
+        const broken = next && ((next.c === "H" && Math.abs(rounded[1] - oldStart[1]) >= 0.05)
+          || (next.c === "V" && Math.abs(rounded[0] - oldStart[0]) >= 0.05));
+        if (broken) {
+          const [, end] = segmentEnds(segs)[1];
+          next.c = "L";
+          next.p = [end];
+        }
+      } else {
+        const [from] = segmentEnds(out)[out.length - 1];
+        moveSegmentEnd(out[out.length - 1], from, rounded);
+      }
+    };
+
+    const crossing = lastCrossing(inner, tip, lines);
+    if (crossing && dist(crossing, tip) <= SNAP_TRIM * k && dist(crossing, tip) > 0.3 * k) {
+      write(crossing);
+      result.trimmed += 1;
+      continue;
+    }
+    const near = nearestOn(tip, lines);
+    if (near.d < 0.05 * k) continue;
+    if (near.d < SNAP_JOIN * k) {
+      write(near.q);
+      result.joined += 1;
+      continue;
+    }
+    if (near.d < SNAP_FLOAT * k) {
+      // 沿自己往回收，直到离别的笔够远；最多收掉这一段的四成，免得整笔被吃掉。
+      const length = dist(inner, tip);
+      const unit: Point = length ? [(inner[0] - tip[0]) / length, (inner[1] - tip[1]) / length] : [0, 0];
+      const budget = Math.min(length * 0.4, SNAP_FLOAT * 2 * k);
+      let moved = 0;
+      let point = tip;
+      while (moved < budget && nearestOn(point, lines).d < FLOAT_TARGET * k) {
+        moved += 0.2 * k;
+        point = [tip[0] + unit[0] * moved, tip[1] + unit[1] * moved];
+      }
+      if (moved > 0) {
+        write(point);
+        result.floated += 1;
+      }
+    }
+  }
+  return result.joined || result.trimmed || result.floated ? result : null;
+}
+
 /* ────────────────────────── 对外接口 ────────────────────────── */
 
 export type Recognition = {
@@ -1007,6 +1242,8 @@ export type Recognition = {
   /** 命中的基本笔画名；没把握时为 null。 */
   stroke: string | null;
   segs: Segment[];
+  /** 按拙趣写法改过的地方（钩收短 / 撇捺拉直），给状态栏说一声。 */
+  notes: string[];
 };
 
 const MATCH_LIMIT = 1.1;  // 打分超过它就不硬套笔画名，退回「折线 · N 段」
@@ -1041,6 +1278,15 @@ export function recognizeStroke(raw: Point[], vb: number, style: StrokeStyle = B
   const segs = segmentsFromPieces(pieces, resolved, sampled, style);
   if (segs.length < 2) return null;
 
+  // 拙趣写法：钩短（卧钩除外，心的钩关系到认字）、撇捺直一点。
+  const notes: string[] = [];
+  if (hit && hit.template.name.includes("钩") && hit.template.name !== "卧钩" && shortenHook(segs, HOOK_MAX)) {
+    notes.push("钩已收短");
+  }
+  if (hit && STRAIGHTEN_TEMPLATES.has(hit.template.name) && straightenCurves(segs, STRAIGHTEN)) {
+    notes.push("已拉直");
+  }
+
   const back = 1 / scale;
   const scaled = segs.map((segment) => ({
     ...segment,
@@ -1052,5 +1298,5 @@ export function recognizeStroke(raw: Point[], vb: number, style: StrokeStyle = B
     ? (parts[0].straight ? "直线" : "曲线")
     : `${bends ? "弯折" : "折线"} · ${parts.length} 段`;
 
-  return { type: hit ? hit.template.name : fallback, stroke: hit ? hit.template.name : null, segs: scaled };
+  return { type: hit ? hit.template.name : fallback, stroke: hit ? hit.template.name : null, segs: scaled, notes };
 }

@@ -29,8 +29,7 @@ mkdir -p ~/.codex/skills && cp -R Yuragi/skills/hand-glyph ~/.codex/skills/     
 
 - **Python 3.8+**，出图只用标准库，不用装别的。
 - 可选：Pillow（参照叠图出 PNG）。`python3 -m pip install -r scripts/requirements.txt`
-- 参照字体「小赖」（SIL OFL）没装的话，第一次画新字时自动下载约 22MB 到 `~/.cache/hand-glyph/fonts`；
-  不想联网就加 `--no-download`。
+- 结构参照用系统自带的黑体，不下载字体、不联网。
 
 装好后可以先检查一下环境：
 
@@ -46,7 +45,7 @@ python3 ~/.agents/skills/hand-glyph/scripts/handdraw.py doctor   # 手动安装�
 
 也可以点名「用 hand-glyph」。助手会读 [SKILL.md](SKILL.md) 自己完成：
 
-- **这套工具不自带字库。** 缺的字由助手按规范一笔一笔画骨架（对照系统黑体和小赖），第一次写新字会慢一些；
+- **这套工具不自带字库。** 缺的字由助手按规范一笔一笔画骨架（对照系统黑体核结构），第一次写新字会慢一些；
   画好的字库 JSON 留着，下次同样的字直接排。
 - 交付物默认只有字：透明背景，不加底色、装饰和阴影。要海报或配图请明说。
 - 显示尺寸别太小：汉字一格不低于 44px，英文一行不低于 28px。

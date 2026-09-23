@@ -13,9 +13,10 @@ import { fmtFixed, pyG, pyRound } from "../../src/lib/core/num";
 import { rnd } from "../../src/lib/core/rng";
 import * as rowmod from "../../src/lib/core/row";
 import { gaps, structure, vary } from "../../src/lib/core/vary";
+import { zhuoLetter } from "../../src/lib/core/latinZhuo";
 import { loadGeo, serializeGeoFile, toGeo, type GlyphLibrary } from "../../src/lib/core/library";
 import { render, renderRow } from "../../src/lib/core/render";
-import { paramsOf, seedMap, writeLines, type RawLibrary } from "../../src/lib/core/draw";
+import { driftOf, fitOf, paramsOf, seedMap, writeLines, type RawLibrary } from "../../src/lib/core/draw";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DATA = join(HERE, "..", "..", "src", "data");
@@ -132,6 +133,15 @@ for (const c of fixtures.vary) {
   eq(`vary ${c.lib} ${c.name} seed=${c.seed}`, out.map((e) => e.d ?? null), c.out);
 }
 
+// 7c. 英文变拙：编辑器的按钮跟 latin-zhuo 命令逐字节一致
+for (const c of fixtures.latin_zhuo ?? []) {
+  const items = itemsOf(c.lib);
+  const els = JSON.parse(JSON.stringify(items[c.name]));
+  const out = zhuoLetter(c.name, els, c.amount);
+  eq(`latin_zhuo ${c.lib} ${c.name} amount=${c.amount}`, out.map((e) => e.d ?? null), c.out);
+  eq(`latin_zhuo adv ${c.lib} ${c.name} amount=${c.amount}`, out[0].adv ?? null, c.adv);
+}
+
 // 8. 结构不变量
 for (const c of fixtures.structure) {
   const data = loadRaw(c.lib);
@@ -187,6 +197,8 @@ for (const c of fixtures.row) {
 // 9b. 边界：缺字、标点、字距/词距、局部种子
 for (const c of fixtures.row_edge) {
   const { glyphs } = payloadOf(c.lib);
+  if (c.fit !== undefined) glyphs.fit = c.fit;
+  if (c.drift !== undefined) glyphs.drift = c.drift;
   const result = renderRow({
     text: c.text, seed: c.seed, ampk: c.ampk ?? glyphs.jit, mode: c.mode,
     amp: c.amp ?? glyphs.amp, over: c.over ?? glyphs.over,
@@ -204,6 +216,8 @@ for (const c of fixtures.row_edge) {
 // 9c. 自动换行：折行边界按渲染后的实际宽高算，多行共用一个 viewBox
 for (const c of fixtures.row_wrap) {
   const { glyphs } = payloadOf(c.lib);
+  if (c.fit !== undefined) glyphs.fit = c.fit;
+  if (c.drift !== undefined) glyphs.drift = c.drift;
   const result = renderRow({
     text: c.text, seed: 42, ampk: glyphs.jit, mode: c.mode,
     amp: glyphs.amp, over: glyphs.over, vary: true, varyk: glyphs.vary,
@@ -221,7 +235,9 @@ for (const c of fixtures.row_wrap) {
 
 // 10. write：多行、断行
 for (const c of fixtures.write) {
-  const data = loadRaw(c.lib);
+  let data = loadRaw(c.lib);
+  if (c.fit === "drift") data = { ...data, fit: 12, drift: 1 };
+  else if (c.fit !== null && c.fit !== undefined) data = { ...data, fit: c.fit, track: 2 };
   const p = paramsOf(data);
   const raw: RawLibrary = {
     ...p,
@@ -229,6 +245,9 @@ for (const c of fixtures.write) {
     sw: Number(data.sw ?? 1.5),
     seed: (data.seed as number) ?? null,
     glyphSeeds: seedMap(data.glyphSeeds),
+    fit: fitOf(data.fit),
+    track: Number(data.track ?? 0),
+    drift: driftOf(data.drift),
     items: (data.items ?? data) as Record<string, any[]>,
   };
   const [svg, ratio] = writeLines(raw, c.text, c.seed, true);
@@ -243,11 +262,12 @@ for (const c of fixtures.save) {
   const expected = c.payload.glyphs;
   eq(`loadGeo ${c.lib} 表头`, {
     vb: glyphs.vb, sw: glyphs.sw, amp: glyphs.amp, over: glyphs.over,
-    jit: glyphs.jit, vary: glyphs.vary, track: glyphs.track, word: glyphs.word,
+    jit: glyphs.jit, vary: glyphs.vary, track: glyphs.track, word: glyphs.word, fit: glyphs.fit ?? null, drift: glyphs.drift,
     seed: glyphs.seed, glyphSeeds: glyphs.glyphSeeds, editor: glyphs.editor,
   }, {
     vb: expected.vb, sw: expected.sw, amp: expected.amp, over: expected.over,
     jit: expected.jit, vary: expected.vary, track: expected.track, word: expected.word,
+    fit: expected.fit ?? null, drift: expected.drift,
     seed: expected.seed ?? null, glyphSeeds: expected.glyphSeeds, editor: expected.editor,
   });
 }

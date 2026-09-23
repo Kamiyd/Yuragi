@@ -136,6 +136,27 @@ export function paramsOf(g: Record<string, unknown>): Params {
   return { amp: read("amp"), over: read("over"), jit: read("jit"), vary: read("vary") };
 }
 
+/** 字库级 fit：数字 = 汉字按字宽排、字间留这么宽；没写或写坏了 = null（一字一格）。 */
+export function fitOf(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** 字库级 drift（错落倍率）：没写或写坏了 = 0，也就是关掉。 */
+export function driftOf(value: unknown): number {
+  if (value === null || value === undefined || typeof value === "boolean") return 0;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** 字库级 latinZhuo：这套英文已经按 latin-zhuo 变拙过的量；没写 = null。 */
+export function latinZhuoOf(value: unknown): number | null {
+  if (value === null || value === undefined || typeof value === "boolean") return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 /** 清洗可选的逐字种子表；旧字库没有这个字段也完全兼容。 */
 export function seedMap(value: unknown): Record<string, number> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
@@ -185,6 +206,8 @@ export type RawLibrary = {
   vary?: number;
   track?: number;
   word?: number;
+  fit?: number | null;
+  drift?: number;
   seed?: number | null;
   glyphSeeds?: Record<string, number>;
   items: GlyphItems;
@@ -231,15 +254,21 @@ export function writeLines(g: RawLibrary, text: string, seed: number, doVary = t
       [L] = rowmod.latinLayout(seq.map((n) => n ?? " "), polys, advs, {
         seed: seed + li,
         ampK: p.jit,
+        drift: driftOf(g.drift),
         seedFor: (name) => itemSeed(name),
         localFor: (name) => rowmod.localSeed(glyphSeeds, name) !== null,
       });
       for (const it of L) it.baseline_dy = it.dy;
     } else {
+      // 按字宽排（fit）时字距微调 track 一起生效；一字一格的老字库照旧不读 track
+      const fit = fitOf(g.fit);
       L = rowmod.hanLayout(seq, polys, {
         cell: vb,
         seed: seed + li,
         ampK: p.jit,
+        fit,
+        drift: driftOf(g.drift),
+        track: fit !== null ? Number(g.track ?? 0) : 0,
         seedFor: (name) => itemSeed(name),
         localFor: (name) => rowmod.localSeed(glyphSeeds, name) !== null,
       });
@@ -263,14 +292,17 @@ export function writeLines(g: RawLibrary, text: string, seed: number, doVary = t
 
   const pad = 5.0;
   const gap = 7.0;
+  // 错落：多行时每行缩进不一样、行距放宽（drift 0 时全是 0，SVG 跟以前一样）
+  const [indent, lead] = rowmod.lineDrift(blocks.length, seed, driftOf(g.drift));
+  W = Math.max(W, ...blocks.map((b, bi) => (b.box[2] - b.box[0]) + indent[bi]));
   const parts: string[] = [];
   let y = pad;
-  for (const b of blocks) {
+  blocks.forEach((b, bi) => {
     const [x0, y0, , y1] = b.box;
-    parts.push(`<g transform="translate(${fmtFixed(pad - x0, 2)} ${fmtFixed(y - y0, 2)})" `
+    parts.push(`<g transform="translate(${fmtFixed(pad - x0 + indent[bi], 2)} ${fmtFixed(y - y0, 2)})" `
       + `stroke-width="${pyG(b.sw)}">${b.body}</g>`);
-    y += (y1 - y0) + gap;
-  }
+    y += (y1 - y0) + gap + (bi < lead.length ? lead[bi] : 0.0);
+  });
   const H = y - gap + pad;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${fmtFixed(W + 2 * pad, 2)} ${fmtFixed(H, 2)}" `
     + `fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">${parts.join("")}</svg>`;

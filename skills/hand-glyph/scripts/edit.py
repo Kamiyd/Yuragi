@@ -644,6 +644,7 @@ EMPTY = """{
  "vb": 64,
  "sw": 2.8,
  "amp": 0.9,
+ "over": 0,
  "jit": 0.9,
  "vary": 0.9,
  "items": {}
@@ -668,7 +669,7 @@ def serve(path, port=8731, open_browser=True, row=None):
     PATH, ROW = path, row
     if not os.path.exists(path):          # 空库开局：字库是每次自己攒的，不预置字形
         io.open(path, "w", encoding="utf-8").write(EMPTY)
-        print("新建空字库 %s（64 网格 / 线重 2.8 / 手感 0.9），"
+        print("新建空字库 %s（64 网格 / 线重 2.8 / 手感 0.9 / 越位 0），"
               "用「＋ 新字」开始加。" % path)
     load_geo()
     n = len(GEO["items"])

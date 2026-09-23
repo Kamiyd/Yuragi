@@ -11,8 +11,12 @@ const PRESETS: Record<LayoutMode, number> = { han: 2.8, latin: 3.2 };
 /** 拉丁新字形的起手字宽；画完再拖右栏那根「字宽」滑杆。 */
 export const DEFAULT_LATIN_ADV = 30;
 
+/* 汉字新工程关掉收笔越位（over 0）：拙趣字一处都不出头，越位会让 T 字交接和框角支出一小截。
+   跟 skills/hand-glyph/assets/glyphs.json 同一组数。拉丁没对照过样张，保持原来的越位。 */
+const OVER: Record<LayoutMode, number | undefined> = { han: 0, latin: undefined };
+
 export function emptyDocumentText(mode: LayoutMode): string {
-  return `${JSON.stringify({ vb: 64, sw: PRESETS[mode], mode, amp: 0.9, jit: 0.9, vary: 0.9, items: {} }, null, 1)}\n`;
+  return `${JSON.stringify({ vb: 64, sw: PRESETS[mode], mode, amp: 0.9, over: OVER[mode], jit: 0.9, vary: 0.9, items: {} }, null, 1)}\n`;
 }
 
 const DOC_KEY = "hg-document";

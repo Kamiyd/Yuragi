@@ -20,6 +20,7 @@ const FREE_N = 1.5;     // 自由端沿法线：撇捺的斜度
 const CURVE = 1.2;      // 控制点沿法线：弯度 / 钩的挑度
 const BODY = 2.0;       // 整字重心
 export const EPS = 2.0; // 判定「连在一起」的距离
+const SHORT_T = 0.25;   // 自由端沿切线的伸缩不超过这一段长度的这么多：点、钩、短撇两头一缩就没了
 
 export type GeoElement = {
   t?: string;
@@ -281,7 +282,9 @@ function varyOnce(items: GeoElement[], seed: number, cell = 64, amp = 1): GeoEle
       const L = hypot(dx, dy) || 1;
       const tx = dx / L;
       const ty = dy / L;
-      const aT = jit((free ? FREE_T : JOINT * 0.6) * amp * k, seed, 17, si, gi);
+      let tAmp = (free ? FREE_T : JOINT * 0.6) * amp * k;
+      if (free && an.length > 1) tAmp = Math.min(tAmp, SHORT_T * L);   // 短笔两头最多各缩四分之一
+      const aT = jit(tAmp, seed, 17, si, gi);
       const aN = jit((free ? FREE_N : JOINT * 0.4) * amp * k, seed, 19, si, gi);
       disp.set(key, [tx * aT - ty * aN, ty * aT + tx * aN]);
     });

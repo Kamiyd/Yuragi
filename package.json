@@ -10,6 +10,7 @@
     "check": "astro check",
     "parity": "tsx tools/parity/check.ts",
     "parity:fixtures": "python3 tools/parity/fixtures.py",
+    "strokes:check": "tsx tools/strokes-check.ts",
     "typecheck": "astro check"
   },
   "dependencies": {

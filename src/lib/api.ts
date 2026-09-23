@@ -11,12 +11,19 @@ const PRESETS: Record<LayoutMode, number> = { han: 2.8, latin: 3.2 };
 /** 拉丁新字形的起手字宽；画完再拖右栏那根「字宽」滑杆。 */
 export const DEFAULT_LATIN_ADV = 30;
 
-/* 汉字新工程关掉收笔越位（over 0）：拙趣字一处都不出头，越位会让 T 字交接和框角支出一小截。
-   跟 skills/hand-glyph/assets/glyphs.json 同一组数。拉丁没对照过样张，保持原来的越位。 */
-const OVER: Record<LayoutMode, number | undefined> = { han: 0, latin: undefined };
+/* 新工程关掉收笔越位（over 0）：拙趣字一处都不出头，越位会让 T 字交接和框角支出一小截。
+   汉字跟 skills/hand-glyph/assets/glyphs.json 同一组数；拉丁同样不出头。 */
+const OVER: Record<LayoutMode, number | undefined> = { han: 0, latin: 0 };
+/* 汉字新工程按字宽排（fit 12）：字有大有小、宽窄随字，等宽格子会让小字两边空一大块。 */
+const FIT: Record<LayoutMode, number | undefined> = { han: 12, latin: undefined };
+/* 新工程：线抖压到 0.65（喜茶的线几乎是直的）。错落（drift 1）只给汉字；英文字母保持规整，只调线宽这类设置。 */
+const AMP: Record<LayoutMode, number> = { han: 0.65, latin: 0.65 };
+/* 汉字新工程的逐字大小起伏放到 1.3（约 ±12%）；拉丁的由 latin-zhuo 命令写，编辑器新建时保持 0.9。 */
+const JIT: Record<LayoutMode, number> = { han: 1.3, latin: 0.9 };
+const DRIFT: Record<LayoutMode, number | undefined> = { han: 1, latin: undefined };
 
 export function emptyDocumentText(mode: LayoutMode): string {
-  return `${JSON.stringify({ vb: 64, sw: PRESETS[mode], mode, amp: 0.9, over: OVER[mode], jit: 0.9, vary: 0.9, items: {} }, null, 1)}\n`;
+  return `${JSON.stringify({ vb: 64, sw: PRESETS[mode], mode, amp: AMP[mode], over: OVER[mode], jit: JIT[mode], vary: 0.9, fit: FIT[mode], drift: DRIFT[mode], items: {} }, null, 1)}\n`;
 }
 
 const DOC_KEY = "hg-document";

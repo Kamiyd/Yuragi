@@ -27,8 +27,9 @@ import {
   importDocument,
   requestJSON,
 } from "../lib/api";
-import { orderedGlyphNames } from "../lib/core/library";
-import { BASE_STYLE, learnStrokeStyle, recognizeStroke, type StrokeStyle } from "../lib/strokes";
+import { orderedGlyphNames, toEdit, toGeo } from "../lib/core/library";
+import { LATIN_ZHUO_DRIFT, LATIN_ZHUO_JIT, zhuoLetter } from "../lib/core/latinZhuo";
+import { BASE_STYLE, learnStrokeStyle, recognizeStroke, snapEnds, type StrokeStyle } from "../lib/strokes";
 import {
   SHOWCASE_SPEEDS,
   buildShowcase,
@@ -96,6 +97,12 @@ type GlyphLibrary = {
   jit: number;
   vary: number;
   track?: number;
+  /** 汉字按字宽排：字间留这么宽。没有 = 一字一格等宽。 */
+  fit?: number | null;
+  /** 错落倍率：字上下浮、字距忽近忽远、多行缩进不一样。0 = 关掉。 */
+  drift: number;
+  /** 英文已经按 latin-zhuo 变拙过的量；null / 没有 = 规整版。 */
+  latinZhuo?: number | null;
   /** 全局行预览种子；保存后也作为 write 未显式传 -s 时的默认种子。 */
   seed?: number | null;
   glyphSeeds: Record<string, number>;
@@ -356,6 +363,9 @@ function sameGlyphSettings(left: GlyphLibrary | null | undefined, right: GlyphLi
     jit: library.jit,
     vary: library.vary,
     track: library.track,
+    fit: library.fit,
+    drift: library.drift,
+    latinZhuo: library.latinZhuo,
     seed: library.seed,
     editor: library.editor,
   });
@@ -2549,6 +2559,8 @@ export default function EditorApp() {
       // Structural edits stay on the main canvas until a save succeeds.
       items: rowPreviewItems,
       glyphSeeds: glyphs.glyphSeeds,
+      fit: glyphs.fit ?? null,
+      drift: glyphs.drift ?? 0,
     },
     glyphOrder: names,
     text: rowLine,
@@ -2853,12 +2865,18 @@ export default function EditorApp() {
       return;
     }
     const nextIndex = currentItems.length;
+    // 端点吸附（只在智能识别里）：接准 / 截掉小出头 / 推开到明确浮起，点只浮不接。
+    // 跟落笔算同一步历史，撤销一次整笔去掉；描的时候按住 ⌥ 这一笔就不吸附。
+    const snap = recognized && !event.altKey
+      ? snapEnds(result.segs, currentItems.map((item) => item.segs || []).filter((segs) => segs.length > 1),
+        group.vb, recognized.stroke === "点" || recognized.stroke === "左点")
+      : null;
     // 手迹留在原地淡出，墨线补上来时淡入 —— 交接的那一下不留空档。
     startTraceEcho(raw);
     inkFadeWantedRef.current = performance.now();
     updateItems((items) => [...items, {
       t: "path",
-      segs: result.segs,
+      segs: snap ? snap.segs : result.segs,
       ...(recognized ? {} : { traceMode: "original" }),
       // 拉丁字形的字宽记在第一笔上：新库里落第一笔时就带上，右栏那根滑杆才有东西可拖，
       // 导出排版也不会退回 viewBox 那么宽。
@@ -2868,7 +2886,14 @@ export default function EditorApp() {
     }]);
     setSelectedStrokes([nextIndex]);
     setSelectedPoint({ si: nextIndex, gi: result.segs.length - 1 });
-    setTraceStatus(recognized ? `识别为${result.type} · 继续拖动可添加下一笔。` : traceMode === "smart" ? "已自动保留手迹 · 继续拖动可添加下一笔。" : "已保留手迹 · 继续拖动可添加下一笔。");
+    const snapNote = snap
+      ? [snap.joined && `接准 ${snap.joined} 处`, snap.trimmed && `去掉出头 ${snap.trimmed} 处`, snap.floated && "推开浮起"]
+        .filter(Boolean).join("、") + "（按住 ⌥ 描可不吸附）"
+      : "";
+    const notes = [...(recognized?.notes ?? []), snapNote].filter(Boolean).join(" · ");
+    setTraceStatus(recognized
+      ? `识别为${result.type}${notes ? ` · ${notes}` : ""} · 继续拖动可添加下一笔。`
+      : traceMode === "smart" ? "已自动保留手迹 · 继续拖动可添加下一笔。" : "已保留手迹 · 继续拖动可添加下一笔。");
   };
 
   const tracePointerCancel = (event: React.PointerEvent<SVGSVGElement>) => {
@@ -3337,6 +3362,18 @@ export default function EditorApp() {
     };
     setGeo(nextGeo);
     queueRightPanelSave(nextGeo, (base) => ({ ...base, ...clone(patch) }));
+  };
+
+  /* 英文变拙：跟 skill 的 `handdraw.py latin-zhuo` 同一个算法（parity 逐字节比对）。
+     整套字母一次改完、记 latinZhuo，按钮随后变灰 —— 同一套字拙两次就过头了。撤销能还原。 */
+  const applyLatinZhuo = () => {
+    if (!geo?.glyphs || geo.glyphs.latinZhuo) return;
+    const items: Record<string, EditableElement[]> = {};
+    for (const [name, els] of Object.entries(geo.glyphs.items)) {
+      const plain = els.map((el) => toGeo(el as Parameters<typeof toGeo>[0]));
+      items[name] = zhuoLetter(name, plain).map((el) => toEdit(el) as EditableElement);
+    }
+    updateGlyphsAndSave({ items, drift: LATIN_ZHUO_DRIFT, jit: LATIN_ZHUO_JIT, latinZhuo: 1 });
   };
 
   const updateEditorAndSave = (patch: Partial<EditorConfig>) => {
@@ -4881,6 +4918,52 @@ export default function EditorApp() {
                     formatValue={(value) => String(Math.round(value))}
                     onChange={setRowTrackAndSave}
                   />
+                  {/* 错落只动字在行里的位置（上下、字距、多行缩进），不改字形 ——
+                      单字画布上看不出来，所以跟字距放一起，看底下的行预览。 */}
+                  <SliderField
+                    label="错落"
+                    value={group.drift ?? 0}
+                    min={0}
+                    max={2}
+                    step={0.05}
+                    onChange={(value) => updateGlyphsAndSave({ drift: value })}
+                  />
+                  {!isLatinLayout ? (
+                    /* 按字宽排（fit）：字有大有小之后，等宽格子会让小字两边空一大块。
+                       关掉 = 一字一格等宽（老字库的排法）。 */
+                    <div className="switch-row">
+                      <span>按字宽排</span>
+                      <button
+                        type="button"
+                        className="switch-button"
+                        role="switch"
+                        aria-label="按字宽排"
+                        aria-checked={group.fit != null}
+                        data-checked={group.fit != null}
+                        onClick={() => updateGlyphsAndSave({ fit: group.fit != null ? null : 12 })}
+                      >
+                        <span className="switch-track"><span /></span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="latin-zhuo">
+                      <button
+                        className="library-file-action"
+                        type="button"
+                        disabled={!!group.latinZhuo || hasUnsavedChanges || !Object.keys(group.items).length}
+                        onClick={applyLatinZhuo}
+                      >
+                        {group.latinZhuo ? "已变拙" : "英文变拙"}
+                      </button>
+                      <span className="latin-zhuo-note">
+                        {group.latinZhuo
+                          ? "这套字母已经变拙过（撤销可还原）。"
+                          : hasUnsavedChanges
+                            ? "先保存画布，再变拙。"
+                            : "字母照规整写法画好后点一次：高低宽窄、歪斜、弧线一起变拙，错落 2、大小起伏 1.3。"}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             </Section>

@@ -222,8 +222,6 @@ export function preservesTrace(element: GeoElement): boolean {
 /** 一个字的硬几何 -> 另一份写法。结构不动，写法全换。 */
 export function vary(items: GeoElement[], seed: number, cell = 64, amp = 1, tries = 6): GeoElement[] {
   const base = items.map((e) => ({ ...e }));
-  // 保留描摹的字形整体不变形：只变其余笔画会让它们从共用的关节上脱开。
-  if (items.some((element) => preservesTrace(element))) return base;
   const strokes0 = items.filter((e) => (e.t ?? "path") === "path").map((e) => dpath.parse(String(e.d ?? "")));
   if (!strokes0.length) return base;
   const g0 = gaps(strokes0);
@@ -235,6 +233,128 @@ export function vary(items: GeoElement[], seed: number, cell = 64, amp = 1, trie
   return base;            // 摇不出合格的写法：这个字这次就不变
 }
 
+type TraceInfo = [Array<[number, Point]>, number[], number[]];
+
+/** 保留手迹的一笔：关键锚点（两头 + 关节）照常算位移，中间的采样点按弧长插值，
+    每一段再加一点整体的弯。返回 (锚点, 弧长, 关键锚点序号)，贴回宿主时要用。 */
+function traceDisp(si: number, segs: Segment[], disp: Map<string, Point>, clusterOf: Map<string, number>,
+                   attached: Set<string>, jd: Map<number, Point>, seed: number, amp: number, k: number): TraceInfo {
+  const an = anchors(segs);
+  const m = an.length;
+  if (!m) return [an, [], []];
+  const acc = [0];
+  for (let n = 1; n < m; n += 1) {
+    const a = an[n - 1][1];
+    const b = an[n][1];
+    acc.push(acc[acc.length - 1] + hypot(b[0] - a[0], b[1] - a[1]));
+  }
+  const total = acc[acc.length - 1];
+  const keys: number[] = [];
+  const kd = new Map<number, Point>();
+  an.forEach(([gi, p], n) => {
+    const key = key2(si, gi);
+    if (clusterOf.has(key)) {
+      kd.set(n, jd.get(clusterOf.get(key) as number) as Point);
+    } else if (n !== 0 && n !== m - 1) {
+      return;
+    } else if (attached.has(key)) {
+      kd.set(n, [0, 0]);                         // 稍后贴回宿主，先不动
+    } else if (n === m - 1 && m > 2 && kd.has(0)
+               && hypot(p[0] - an[0][1][0], p[1] - an[0][1][1]) < EPS * k) {
+      kd.set(n, kd.get(0) as Point);             // 首尾接上的圈：两头一起走，圈不断开
+    } else {
+      // 自由端：切线按一小段弧长外的点取 —— 紧挨着的采样点方向是乱的
+      const reach = Math.min(4 * k, total * 0.5);
+      let q = p;
+      if (n === 0) {
+        for (let j = 1; j < m; j += 1) {
+          q = an[j][1];
+          if (acc[j] >= reach) break;
+        }
+      } else {
+        for (let j = m - 2; j >= 0; j -= 1) {
+          q = an[j][1];
+          if (total - acc[j] >= reach) break;
+        }
+      }
+      let dx = p[0] - q[0];
+      let dy = p[1] - q[1];
+      if (n === 0) { dx = -dx; dy = -dy; }
+      const L = hypot(dx, dy);
+      const tx = L ? dx / L : 1;
+      const ty = L ? dy / L : 0;
+      const tAmp = Math.min(FREE_T * amp * k, SHORT_T * total);
+      const aT = jit(tAmp, seed, 17, si, gi);
+      const aN = jit(FREE_N * amp * k, seed, 19, si, gi);
+      kd.set(n, [tx * aT - ty * aN, ty * aT + tx * aN]);
+    }
+    keys.push(n);
+  });
+
+  let ki = 0;
+  an.forEach(([gi], n) => {
+    while (ki < keys.length - 2 && n > keys[ki + 1]) ki += 1;
+    const na = keys[ki];
+    const nb = keys.length > 1 ? keys[ki + 1] : na;
+    const da = kd.get(na) as Point;
+    const db = kd.get(nb) as Point;
+    const span = acc[nb] - acc[na];
+    const u = span > 0 ? (acc[n] - acc[na]) / span : 0;
+    const pa = an[na][1];
+    const pb = an[nb][1];
+    const cx = pb[0] - pa[0];
+    const cy = pb[1] - pa[1];
+    const L = hypot(cx, cy);
+    const nx = L ? -cy / L : 0;
+    const ny = L ? cx / L : 0;
+    const bow = jit(Math.min(CURVE * amp * k, span * 0.15), seed, 31, si, na) * 4 * u * (1 - u);
+    disp.set(key2(si, gi), [da[0] + (db[0] - da[0]) * u + nx * bow,
+                            da[1] + (db[1] - da[1]) * u + ny * bow]);
+  });
+
+  // 控制点跟着两端的采样点走，不另加弯度：轨迹的小圆角原样留着
+  segs.forEach((s, gi) => {
+    if (s.p.length < 2) return;
+    const dEnd = disp.get(key2(si, gi)) ?? [0, 0];
+    const dPrev = disp.get(key2(si, gi - 1)) ?? dEnd;
+    const nCtrl = s.p.length - 1;
+    for (let ci = 0; ci < nCtrl; ci += 1) {
+      const u = (ci + 1) / (nCtrl + 1);
+      disp.set(`c,${si},${gi},${ci}`, [dPrev[0] + (dEnd[0] - dPrev[0]) * u,
+                                       dPrev[1] + (dEnd[1] - dPrev[1]) * u]);
+    }
+  });
+  return [an, acc, keys];
+}
+
+/** 保留手迹的端点贴回宿主：挪动量顺着弧长摊到下一个关键锚点，不在笔尖折一下。 */
+function traceSpread(segs: Segment[], info: TraceInfo, gi: number, delta: Point) {
+  const [an, acc, keys] = info;
+  const n0 = an.findIndex(([g]) => g === gi);
+  const nk = n0 === keys[0] && keys.length > 1 ? keys[1] : (keys.length > 1 ? keys[keys.length - 2] : n0);
+  const span = Math.abs(acc[nk] - acc[n0]);
+  const w = new Map<number, number>();
+  an.forEach(([g], n) => {
+    if ((n0 <= n && n <= nk) || (nk <= n && n <= n0)) {
+      w.set(g, span > 0 ? 1 - Math.abs(acc[n] - acc[n0]) / span : (n === n0 ? 1 : 0));
+    }
+  });
+  segs.forEach((s, g) => {
+    if (!s.p.length) return;
+    const we = w.get(g) ?? 0;
+    const wp = w.get(g - 1) ?? we;
+    const nCtrl = s.p.length - 1;
+    for (let ci = 0; ci < nCtrl; ci += 1) {
+      const u = (ci + 1) / (nCtrl + 1);
+      const wc = wp + (we - wp) * u;
+      s.p[ci][0] += delta[0] * wc;
+      s.p[ci][1] += delta[1] * wc;
+    }
+    s.p[s.p.length - 1][0] += delta[0] * we;
+    s.p[s.p.length - 1][1] += delta[1] * we;
+  });
+}
+
 function varyOnce(items: GeoElement[], seed: number, cell = 64, amp = 1): GeoElement[] {
   const k = cell / 64;
   const strokes: Array<[number, Segment[]]> = [];
@@ -244,8 +364,22 @@ function varyOnce(items: GeoElement[], seed: number, cell = 64, amp = 1): GeoEle
   if (!strokes.length) return items.map((e) => ({ ...e }));
 
   const segsList = strokes.map(([, s]) => s);
-  const { clusterOf, attach } = structure(segsList, EPS * k);
+  const { clusterOf, attach: attach0 } = structure(segsList, EPS * k);
+  // 保留手迹：密密的采样点只是轨迹，不是骨架。只有两头和跟别的笔共用的关节算锚点，
+  // 中间的点顺着弧长跟着走 —— 复杂的轨迹形状不散，写法照样重摇。
+  const trace = new Set<number>();
+  strokes.forEach(([i], si) => { if (preservesTrace(items[i])) trace.add(si); });
+  const traceEnds = new Map<number, [number, number]>();
+  for (const si of trace) {
+    const an = anchors(segsList[si]);
+    if (an.length) traceEnds.set(si, [an[0][0], an[an.length - 1][0]]);
+  }
+  const attach = attach0.filter(([si, gi]) => {                // 中段采样点不往别人身上挂
+    const ends = traceEnds.get(si);
+    return !ends || ends.includes(gi);
+  });
   const attached = new Set(attach.map(([si, gi]) => key2(si, gi)));
+  const traceKeys = new Map<number, TraceInfo>();               // si -> (锚点, 弧长, 关键锚点序号)
 
   const bx = jit(BODY * amp * k, seed, 3);          // 整字重心
   const by = jit(BODY * amp * k, seed, 5);
@@ -258,6 +392,10 @@ function varyOnce(items: GeoElement[], seed: number, cell = 64, amp = 1): GeoEle
 
   const disp = new Map<string, Point>();            // 锚点 / 控制点 -> 位移
   segsList.forEach((segs, si) => {
+    if (trace.has(si)) {
+      traceKeys.set(si, traceDisp(si, segs, disp, clusterOf, attached, jd, seed, amp, k));
+      return;
+    }
     const an = anchors(segs);
     an.forEach(([gi, p], n) => {
       const key = key2(si, gi);
@@ -339,6 +477,12 @@ function varyOnce(items: GeoElement[], seed: number, cell = 64, amp = 1): GeoEle
     const p = pointAt(host, t);
     const seg = outSegs[si][gi];
     if (!seg.p.length) continue;
+    const info = traceKeys.get(si);
+    if (info) {
+      const old = seg.p[seg.p.length - 1];
+      traceSpread(outSegs[si], info, gi, [p[0] - old[0], p[1] - old[1]]);
+      continue;
+    }
     const old = seg.p[seg.p.length - 1];
     const dx = p[0] - old[0];
     const dy = p[1] - old[1];

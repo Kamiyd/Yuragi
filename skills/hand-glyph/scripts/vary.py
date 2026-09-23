@@ -228,10 +228,6 @@ def vary(items, seed, cell=64, amp=1.0, tries=6):
     非 path 的元素（rect / circle）原样带过 —— 汉字里用不到，但几何格式允许。
     """
     base = [dict(e) for e in items]
-    # Keep the whole glyph coherent: varying only its other strokes would
-    # detach them from the preserved trace at their shared joints.
-    if any(preserves_trace(element) for element in items):
-        return base
     strokes0 = [dpath.parse(e["d"]) for e in items if e.get("t", "path") == "path"]
     if not strokes0:
         return base
@@ -242,6 +238,110 @@ def vary(items, seed, cell=64, amp=1.0, tries=6):
         if intact(g0, gaps(s1), EPS * cell / 64.0):
             return out
     return base            # 摇不出合格的写法：这个字这次就不变
+
+
+def _trace_disp(si, segs, disp, cluster_of, attached_pts, jd, seed, amp, k):
+    """保留手迹的一笔：关键锚点（两头 + 关节）照常算位移，中间的采样点按弧长插值，
+    每一段再加一点整体的弯。返回 (锚点, 弧长, 关键锚点序号)，贴回宿主时要用。"""
+    an = _anchors(segs)
+    m = len(an)
+    if not m:
+        return (an, [], [])
+    acc = [0.0]
+    for n in range(1, m):
+        a, b = an[n - 1][1], an[n][1]
+        acc.append(acc[-1] + math.hypot(b[0] - a[0], b[1] - a[1]))
+    total = acc[-1]
+    keys, kd = [], {}
+    for n, (gi, p) in enumerate(an):
+        key = (si, gi)
+        if key in cluster_of:
+            kd[n] = jd[cluster_of[key]]
+        elif n != 0 and n != m - 1:
+            continue
+        elif key in attached_pts:
+            kd[n] = (0.0, 0.0)                  # 稍后贴回宿主，先不动
+        elif n == m - 1 and m > 2 and 0 in kd and math.hypot(
+                p[0] - an[0][1][0], p[1] - an[0][1][1]) < EPS * k:
+            kd[n] = kd[0]                       # 首尾接上的圈：两头一起走，圈不断开
+        else:
+            # 自由端：切线按一小段弧长外的点取 —— 紧挨着的采样点方向是乱的
+            reach = min(4.0 * k, total * 0.5)
+            q = p
+            if n == 0:
+                for j in range(1, m):
+                    q = an[j][1]
+                    if acc[j] >= reach:
+                        break
+            else:
+                for j in range(m - 2, -1, -1):
+                    q = an[j][1]
+                    if total - acc[j] >= reach:
+                        break
+            dx, dy = p[0] - q[0], p[1] - q[1]
+            if n == 0:
+                dx, dy = -dx, -dy
+            L = math.hypot(dx, dy)
+            tx, ty = (dx / L, dy / L) if L else (1.0, 0.0)
+            t_amp = min(FREE_T * amp * k, SHORT_T * total)
+            a_t = jit(t_amp, seed, 17, si, gi)
+            a_n = jit(FREE_N * amp * k, seed, 19, si, gi)
+            kd[n] = (tx * a_t - ty * a_n, ty * a_t + tx * a_n)
+        keys.append(n)
+
+    ki = 0
+    for n, (gi, p) in enumerate(an):
+        while ki < len(keys) - 2 and n > keys[ki + 1]:
+            ki += 1
+        na = keys[ki]
+        nb = keys[ki + 1] if len(keys) > 1 else na
+        da, db = kd[na], kd[nb]
+        span = acc[nb] - acc[na]
+        u = (acc[n] - acc[na]) / span if span > 0 else 0.0
+        pa, pb = an[na][1], an[nb][1]
+        cx, cy = pb[0] - pa[0], pb[1] - pa[1]
+        L = math.hypot(cx, cy)
+        nx, ny = (-cy / L, cx / L) if L else (0.0, 0.0)
+        bow = jit(min(CURVE * amp * k, span * 0.15), seed, 31, si, na) * 4.0 * u * (1.0 - u)
+        disp[(si, gi)] = (da[0] + (db[0] - da[0]) * u + nx * bow,
+                          da[1] + (db[1] - da[1]) * u + ny * bow)
+
+    # 控制点跟着两端的采样点走，不另加弯度：轨迹的小圆角原样留着
+    for gi, s in enumerate(segs):
+        if len(s["p"]) < 2:
+            continue
+        d_end = disp.get((si, gi), (0, 0))
+        d_prev = disp.get((si, gi - 1), d_end)
+        n_ctrl = len(s["p"]) - 1
+        for ci in range(n_ctrl):
+            u = (ci + 1) / (n_ctrl + 1)
+            disp[("c", si, gi, ci)] = (d_prev[0] + (d_end[0] - d_prev[0]) * u,
+                                       d_prev[1] + (d_end[1] - d_prev[1]) * u)
+    return (an, acc, keys)
+
+
+def _trace_spread(segs, info, gi, delta):
+    """保留手迹的端点贴回宿主：挪动量顺着弧长摊到下一个关键锚点，不在笔尖折一下。"""
+    an, acc, keys = info
+    idx = {g: n for n, (g, _) in enumerate(an)}
+    n0 = idx[gi]
+    nk = keys[1] if n0 == keys[0] and len(keys) > 1 else (keys[-2] if len(keys) > 1 else n0)
+    span = abs(acc[nk] - acc[n0])
+    w = {}
+    for n, (g, _) in enumerate(an):
+        if (n0 <= n <= nk) or (nk <= n <= n0):
+            w[g] = 1.0 - abs(acc[n] - acc[n0]) / span if span > 0 else (1.0 if n == n0 else 0.0)
+    for g, s in enumerate(segs):
+        if not s["p"]:
+            continue
+        we = w.get(g, 0.0)
+        wp = w.get(g - 1, we)
+        n_ctrl = len(s["p"]) - 1
+        for ci in range(n_ctrl):
+            u = (ci + 1) / (n_ctrl + 1)
+            wc = wp + (we - wp) * u
+            s["p"][ci][0] += delta[0] * wc; s["p"][ci][1] += delta[1] * wc
+        s["p"][-1][0] += delta[0] * we; s["p"][-1][1] += delta[1] * we
 
 
 def _vary_once(items, seed, cell=64, amp=1.0):
@@ -257,7 +357,15 @@ def _vary_once(items, seed, cell=64, amp=1.0):
 
     segs_list = [s for _, s in strokes]
     cluster_of, attach = structure(segs_list, EPS * k)
+    # 保留手迹：密密的采样点只是轨迹，不是骨架。只有两头和跟别的笔共用的关节算锚点，
+    # 中间的点顺着弧长跟着走 —— 复杂的轨迹形状不散，写法照样重摇。
+    trace = {si for si, (i, _) in enumerate(strokes) if preserves_trace(items[i])}
+    trace_ends = {si: (_anchors(segs_list[si])[0][0], _anchors(segs_list[si])[-1][0])
+                  for si in trace if _anchors(segs_list[si])}
+    attach = [a for a in attach
+              if a[0] not in trace_ends or a[1] in trace_ends[a[0]]]   # 中段采样点不往别人身上挂
     attached_pts = {(si, gi) for si, gi, _, _ in attach}
+    trace_keys = {}                              # si -> (锚点, 弧长, 关键锚点序号)
 
     bx = jit(BODY * amp * k, seed, 3)          # 整字重心
     by = jit(BODY * amp * k, seed, 5)
@@ -269,6 +377,9 @@ def _vary_once(items, seed, cell=64, amp=1.0):
 
     disp = {}                                   # (si, gi) -> 位移
     for si, segs in enumerate(segs_list):
+        if si in trace:
+            trace_keys[si] = _trace_disp(si, segs, disp, cluster_of, attached_pts, jd, seed, amp, k)
+            continue
         poly = _poly(segs)
         an = _anchors(segs)
         for n, (gi, p) in enumerate(an):
@@ -341,6 +452,10 @@ def _vary_once(items, seed, cell=64, amp=1.0):
             continue
         p = _at(host, t)
         seg = out_segs[si][gi]
+        if si in trace_keys and seg["p"]:
+            old = seg["p"][-1]
+            _trace_spread(out_segs[si], trace_keys[si], gi, (p[0] - old[0], p[1] - old[1]))
+            continue
         if seg["p"]:
             old = seg["p"][-1]
             dx, dy = p[0] - old[0], p[1] - old[1]

@@ -226,6 +226,9 @@ def load_geo():
                        vb=float(glyphs.get("vb", 24)), sw=float(glyphs.get("sw", 1.5)),
                        mode=H.read_mode(glyphs.get("mode")),
                        track=float(glyphs.get("track", default_track(glyphs))),
+                       fit=H.fit_of(glyphs.get("fit")),
+                       drift=H.drift_of(glyphs.get("drift")),
+                       latinZhuo=H.latin_zhuo_of(glyphs.get("latinZhuo")),
                        word=float(glyphs.get("word", rowmod.WORD)),
                        seed=preview_seed(glyphs.get("seed")),
                        glyphSeeds=seed_map(glyphs.get("glyphSeeds")),
@@ -258,6 +261,15 @@ def save_geo(glyphs):
         out["track"] = _num(glyphs["track"])
     if abs(float(glyphs.get("word", rowmod.WORD)) - rowmod.WORD) > 1e-9:
         out["word"] = _num(glyphs["word"])
+    fit = H.fit_of(glyphs.get("fit"))          # 没写 = 一字一格，文件里也不写
+    if fit is not None:
+        out["fit"] = _num(fit)
+    drift = H.drift_of(glyphs.get("drift"))    # 0 = 关掉，文件里也不写
+    if drift:
+        out["drift"] = _num(drift)
+    lz = H.latin_zhuo_of(glyphs.get("latinZhuo"))   # 英文已变拙：记着，防止拙两次
+    if lz is not None:
+        out["latinZhuo"] = _num(lz)
     seed = preview_seed(glyphs.get("seed"))
     if seed is not None:
         out["seed"] = seed
@@ -351,13 +363,15 @@ def render_row(text, seed, ampk, mode, g_amp=1.0, g_over=1.0,
             L, _ = rowmod.latin_layout([n if n else " " for n in seq], polys, advs,
                                        seed=seed + line_index, amp_k=ampk,
                                        track=float(track), word=float(word),
+                                       drift=H.drift_of(g.get("drift")),
                                        seed_for=lambda name, oi: item_seed(name, oi),
                                        local_for=lambda name, oi: rowmod.local_seed(glyph_seeds, name) is not None)
             for it in L:
                 it["baseline_dy"] = it["dy"]
         else:
             L = rowmod.han_layout(seq, polys, cell=vb, seed=seed + line_index, amp_k=ampk,
-                                  track=float(track),
+                                  track=float(track), fit=H.fit_of(g.get("fit")),
+                                  drift=H.drift_of(g.get("drift")),
                                   seed_for=lambda name, oi: item_seed(name, oi),
                                   local_for=lambda name, oi: rowmod.local_seed(glyph_seeds, name) is not None)
 
@@ -441,18 +455,20 @@ def render_row(text, seed, ampk, mode, g_amp=1.0, g_over=1.0,
     # 统一映射到 44px，因此不同字面高度不会让某些行看起来被压扁。
     line_unit = max(max(1.0, (ln["rendered"]["box"][3] - ln["rendered"]["box"][1]) + 2 * pad)
                     for ln in lines)
+    # 错落：跟 write 同一个 line_drift —— 每行缩进不一样、行距放宽（drift 0 时全是 0）
+    indent, lead = rowmod.line_drift(len(lines), seed, H.drift_of(g.get("drift")))
     width, y, parts = 0.0, pad, []
-    for ln in lines:
+    for li, ln in enumerate(lines):
         line = ln["rendered"]
         x0, y0, x1, y1 = line["box"]
         line_vbw, line_vbh = (x1 - x0) + 2 * pad, (y1 - y0) + 2 * pad
         scale = line_unit / line_vbh
-        width = max(width, line_vbw * scale)
+        width = max(width, line_vbw * scale + indent[li])
         line_tf = "translate(%.2f %.2f) scale(%.4f)" % (
-            pad - (x0 - pad) * scale, y - (y0 - pad) * scale, scale)
+            pad - (x0 - pad) * scale + indent[li], y - (y0 - pad) * scale, scale)
         for gl in line["glyphs"]:
             parts.append('<g transform="%s %s">%s</g>' % (line_tf, gl["transform"], gl["body"]))
-        y += line_unit + 7.0
+        y += line_unit + 7.0 + (lead[li] if li < len(lead) else 0.0)
     height = y - 7.0 + pad
     vbw = width + 2 * pad
     svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %.2f %.2f" '
@@ -619,6 +635,9 @@ class Handler(BaseHTTPRequestHandler):
                        "mode": H.read_mode(glyphs.get("mode")),
                        "track": _num(glyphs.get("track", default_track(glyphs))),
                        "word": _num(glyphs.get("word", rowmod.WORD)),
+                       "fit": H.fit_of(glyphs.get("fit")),
+                       "drift": H.drift_of(glyphs.get("drift")),
+                       "latinZhuo": H.latin_zhuo_of(glyphs.get("latinZhuo")),
                        "seed": preview_seed(glyphs.get("seed")),
                        "glyphSeeds": seed_map(glyphs.get("glyphSeeds")),
                        "glyphSeedMemory": seed_map(glyphs.get("glyphSeedMemory")),
@@ -643,10 +662,12 @@ class Handler(BaseHTTPRequestHandler):
 EMPTY = """{
  "vb": 64,
  "sw": 2.8,
- "amp": 0.9,
+ "amp": 0.65,
  "over": 0,
- "jit": 0.9,
+ "jit": 1.3,
  "vary": 0.9,
+ "fit": 12,
+ "drift": 1,
  "items": {}
 }
 """
@@ -669,7 +690,7 @@ def serve(path, port=8731, open_browser=True, row=None):
     PATH, ROW = path, row
     if not os.path.exists(path):          # 空库开局：字库是每次自己攒的，不预置字形
         io.open(path, "w", encoding="utf-8").write(EMPTY)
-        print("新建空字库 %s（64 网格 / 线重 2.8 / 手感 0.9 / 越位 0），"
+        print("新建空字库 %s（64 网格 / 线重 2.8 / 抖动 0.65 / 越位 0 / 大小起伏 1.3 / 按字宽排 12 / 错落 1），"
               "用「＋ 新字」开始加。" % path)
     load_geo()
     n = len(GEO["items"])

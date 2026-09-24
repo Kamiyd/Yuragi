@@ -1,7 +1,9 @@
 /* README 里的两张图：docs/type-sample.svg（效果展示）和 docs/quick-start.svg（快速上手）
  *
- * 字形是 tools/readme-showcase/ 里两份专门画的骨架（与示例字库无关），
- * 参数全部是新建工程的默认预设：sw / amp / jit / vary 取自 src/lib/api.ts，
+ * 字形是 tools/readme-showcase/ 里专门画的骨架（与示例字库无关），按 hand-glyph skill 的拙趣规矩写：
+ * han.json 骨架直接画拙，表头是新建汉字工程的预设（amp 0.65 / over 0 / jit 1.3 / fit 12 / drift 1，
+ * 和 src/lib/api.ts 一致）；英文骨架照规整写法画在 latin.json，展示用的是
+ * `handdraw.py latin-zhuo` 从它生成的 latin-zhuo.json（变形 + 错落 2 + jit 1.3）。
  * 种子 42、汉字字距 0、拉丁字距 TRACK、词距 WORD，和编辑器的默认值一致。
  * 这里只负责把渲染好的字摆进画布，不改排版引擎给出的字距。
  *
@@ -134,7 +136,7 @@ class Timeline {
 /* ---------- 效果展示 ---------- */
 
 const hanLib = library("han.json");
-const latinLib = library("latin.json");
+const latinLib = library("latin-zhuo.json");
 
 function typeSample() {
   const W = 1200;
@@ -142,6 +144,7 @@ function typeSample() {
   const HAN_TEXT = "云在青山月在天";
   const LATIN_TEXT = "Clouds rest on the hills.";
   const LINE_GAP_MS = 600;   // 中文写完换到英文那一行，比字间多停一下
+  const LATIN_WEIGHT = 0.8;
 
   const han = line(HAN_TEXT, hanLib, "han");
   let latin = line(LATIN_TEXT, latinLib, "latin");
@@ -154,8 +157,9 @@ function typeSample() {
   // 反推英文的 sw，让两行笔画一样粗（汉字按逐笔提按 w 的平均值算）。线宽不参与
   // 排版，换 sw 重渲一遍不影响字距和 viewBox。
   const hanWs = Object.values(hanLib.items).flat().map((el) => Number(el.w ?? 1));
+  // 英文做副标题再乘 0.8（skill 的 compose --sub-weight 0.8）：字母比汉字小，一样粗时英文显重。
   const hanStroke = hanLib.sw * (hanWs.reduce((a, b) => a + b, 0) / hanWs.length) * hanScale;
-  latin = line(LATIN_TEXT, { ...latinLib, sw: hanStroke / latinScale }, "latin");
+  latin = line(LATIN_TEXT, { ...latinLib, sw: hanStroke * LATIN_WEIGHT / latinScale }, "latin");
   const gap = 40;
   const top = (H - (han.h * hanScale + gap + latin.h * latinScale)) / 2;
 
@@ -169,7 +173,7 @@ function typeSample() {
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="title desc">
   <title id="title">Yuragi 中英文手写字效果展示</title>
-  <desc id="desc">中文“云在青山月在天”和英文“Clouds rest on the hills.”，由 Yuragi 默认参数渲染。</desc>
+  <desc id="desc">中文“云在青山月在天”和英文“Clouds rest on the hills.”，按 hand-glyph 的拙趣规矩画、由 Yuragi 渲染。</desc>
   <rect width="${W}" height="${H}" fill="#ffffff"/>
   <style>
 ${t.css()}
@@ -190,7 +194,7 @@ function quickStart() {
   const CHAR = "天";
   // 默认参数下单字的变化不大，随手挑的种子三个字几乎一样。这三个是在 1–600 里
   // 两两差异最大的一组（按落进格子后每笔采样点的平均位移算），大小、倾斜、笔长都分得开。
-  const VARIANT_SEEDS = [41, 189, 362];
+  const VARIANT_SEEDS = [149, 178, 406];
   const STEP_GAP_MS = 500;   // 一张卡写完，挪到下一张之前停一下
   const INK = "#09090B";
 

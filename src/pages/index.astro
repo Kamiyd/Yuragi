@@ -21,6 +21,8 @@ const description = "从空白字形骨架生成可编辑、带手写变化的 S
     <title>{title}</title>
   </head>
   <body>
+    <!-- 编辑器只做桌面端：窗口窄于 900px（body 的 min-width）时只显示这一句提示，见 editor.css「仅限桌面」。 -->
+    <p class="desktop-only">Yuragi 是为桌面端设计的。<br />请在电脑上打开，窗口宽度至少 900px。</p>
     <EditorApp client:load />
   </body>
 </html>

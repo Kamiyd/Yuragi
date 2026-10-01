@@ -2044,10 +2044,6 @@ export default function EditorApp() {
   const [viewportWidth, setViewportWidth] = React.useState(760);
   const [leftOpen, setLeftOpen] = React.useState(true);
   const [rightOpen, setRightOpen] = React.useState(true);
-  const [mobilePanel, setMobilePanel] = React.useState<"left" | "right" | null>(null);
-  const [isMobile, setIsMobile] = React.useState(() => (
-    typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches
-  ));
   const [openSections, setOpenSections] = React.useState<Record<string, boolean>>({
     library: true,
     layout: true,
@@ -3085,14 +3081,6 @@ export default function EditorApp() {
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, []);
-
-  React.useEffect(() => {
-    const media = window.matchMedia("(max-width: 767px)");
-    const update = () => setIsMobile(media.matches);
-    update();
-    media.addEventListener?.("change", update);
-    return () => media.removeEventListener?.("change", update);
   }, []);
 
   React.useEffect(() => {
@@ -4146,23 +4134,7 @@ export default function EditorApp() {
     "--rail-r": rightOpen ? "304px" : "112px",
   } as React.CSSProperties;
 
-  const toggleMobilePanel = (side: "left" | "right") => {
-    setMobilePanel((current) => current === side ? null : side);
-  };
-
-  const closeMobilePanel = () => {
-    const closingPanel = mobilePanel;
-    setMobilePanel(null);
-    if (isMobile && closingPanel) {
-      window.requestAnimationFrame(() => {
-        document.getElementById(`mobile-${closingPanel}-panel-trigger`)?.focus();
-      });
-    }
-  };
-
   const closePanel = (side: "left" | "right") => {
-    closeMobilePanel();
-    if (isMobile) return;
     if (side === "left") setLeftOpen(false);
     else setRightOpen(false);
   };
@@ -4177,35 +4149,6 @@ export default function EditorApp() {
         setSelectedStrokes([]);
         setSelectedPoint(null);
       }}>
-        <div className="mobile-toolbar" role="toolbar" aria-label="移动端工作区">
-          <button
-            id="mobile-left-panel-trigger"
-            className={`mobile-panel-trigger${mobilePanel === "left" ? " is-active" : ""}`}
-            type="button"
-            aria-expanded={mobilePanel === "left"}
-            aria-controls="mobile-left-panel"
-            onClick={() => toggleMobilePanel("left")}
-          >
-            <PanelGlyph side="left" />
-            <span>字库</span>
-          </button>
-          <div className="mobile-brand" aria-label="Yuragi 手绘字生成器">
-            <span className="mobile-brand-icon">{YuragiMark}</span>
-            <span>Yuragi</span>
-          </div>
-          <button
-            id="mobile-right-panel-trigger"
-            className={`mobile-panel-trigger mobile-panel-trigger--right${mobilePanel === "right" ? " is-active" : ""}`}
-            type="button"
-            aria-expanded={mobilePanel === "right"}
-            aria-controls="mobile-right-panel"
-            onClick={() => toggleMobilePanel("right")}
-          >
-            <span>编辑</span>
-            <PanelGlyph side="right" />
-          </button>
-        </div>
-
         {/* ── 中间：画布 + 工具条 + 行预览 ──────────────────────────── */}
         <div className="workspace">
           <div className="stage">
@@ -4564,15 +4507,6 @@ export default function EditorApp() {
           </div>
         </div>
 
-        {isMobile && mobilePanel && (
-          <button
-            className="mobile-panel-backdrop"
-            type="button"
-            aria-label="关闭面板"
-            onClick={closeMobilePanel}
-          />
-        )}
-
         {toastMessage && <span className="save-toast" role="status" aria-live="polite">{toastMessage}</span>}
         {/* setError 原来只有整页错误屏读得到 —— 字库加载之后报的错全是哑的。
             这条跟「已保存」同一个位置，点一下或者几秒后自己消失。 */}
@@ -4610,11 +4544,9 @@ export default function EditorApp() {
 
         {/* ── 左面板：字库 ─────────────────────────────────────── */}
         <aside
-          id="mobile-left-panel"
           className="panel panel--left"
           data-collapsed={!leftOpen}
-          data-mobile-open={isMobile && mobilePanel === "left"}
-          aria-hidden={isMobile ? mobilePanel !== "left" : !leftOpen}
+          aria-hidden={!leftOpen}
         >
           <div className="panel-head">
             <h1>字库</h1>
@@ -4777,9 +4709,9 @@ export default function EditorApp() {
 
         <button
           className="panel-stub panel-stub--left"
-          data-hidden={leftOpen || mobilePanel === "left"}
+          data-hidden={leftOpen}
           aria-label="展开字库（[）"
-          tabIndex={leftOpen || mobilePanel === "left" ? -1 : 0}
+          tabIndex={leftOpen ? -1 : 0}
           onClick={() => setLeftOpen(true)}
         >
           <span className="panel-stub-inner">
@@ -4790,11 +4722,9 @@ export default function EditorApp() {
 
         {/* ── 右面板：编辑 ─────────────────────────────────────── */}
         <aside
-          id="mobile-right-panel"
           className="panel panel--right"
           data-collapsed={!rightOpen}
-          data-mobile-open={isMobile && mobilePanel === "right"}
-          aria-hidden={isMobile ? mobilePanel !== "right" : !rightOpen}
+          aria-hidden={!rightOpen}
         >
           <div className="panel-head">
             <h2>编辑</h2>
@@ -5080,9 +5010,9 @@ export default function EditorApp() {
 
         <button
           className="panel-stub panel-stub--right"
-          data-hidden={rightOpen || mobilePanel === "right"}
+          data-hidden={rightOpen}
           aria-label="展开编辑（]）"
-          tabIndex={rightOpen || mobilePanel === "right" ? -1 : 0}
+          tabIndex={rightOpen ? -1 : 0}
           onClick={() => setRightOpen(true)}
         >
           <span className="panel-stub-inner">

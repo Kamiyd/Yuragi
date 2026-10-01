@@ -117,6 +117,7 @@ python3 scripts/handdraw.py compose --han han.json "海上生明月" --latin lat
 | `handdraw.py compose --han h.json "中文" --latin l.json "English" -o t.svg` | 中英两行合成透明 SVG |
 | `handdraw.py lint geo.json [--text "文字"] [--svg t.svg]` | 按清单查字库和交付物 |
 | `handdraw.py latin-zhuo latin.json -o z.json` | 英文字库：规整骨架 → 拙趣版（变形 + 错落 2） |
+| `resize_glyphs.py in.json out.json 上=22 涯=50 [--drift 1.5]` | 按目标字面高整体缩放点名的字（标题拉开大小用），缩完列出变挤的笔画对 |
 | `overlay.py geo.json "文字" [--format svg]` | 骨架叠在黑体上核结构（没 Pillow 出 SVG） |
 | `handdraw.py gallery / vary / svg / json / ts geo.json` | 自检画廊 / 重写变化 / 单字 SVG / 路径导出 |
 
@@ -140,6 +141,7 @@ python3 scripts/handdraw.py lint my-font.json --text "文字" --svg title.svg
 - [ ] 笔画数、笔顺对着黑体数过一遍了吗？一律简体（见/门/画）？
 - [ ] 骨架还像字体吗？点都贴着、框大而撑满、折角是圆角、钩又长又标准 = 还不够拙，回去改。
 - [ ] 一行字是不是一样大、一样宽？字面框挨个量一遍：复杂字大、简单字小，窄字窄、扁字扁，相邻两个字面高差 ≥ 4。
+      **当标题用（海报、大字）**：最小 / 最大 ≈ 0.45 才看得出大小；0.7 左右会被说「差不多大、不俏皮」（`glyphs.md`「排成一句标题时」）。
 - [ ] 小字、窄字两边是不是空出一大块？字库表头有没有 `"fit": 12`（没写就是一字一格等宽）。
 - [ ] 一行字是不是站在一条中线上、等距排开？多行是不是左边对齐？有的话表头补 `"drift": 1`。
 - [ ] 有没有出头？一处都不该有。骨架里端点正好落在另一笔上，字库表头 `"over": 0`。

@@ -58,7 +58,8 @@ python3 ~/.agents/skills/hand-glyph/scripts/handdraw.py doctor   # 手动安装�
 ```
 SKILL.md          skill 入口（助手读的说明）
 scripts/          handdraw.py（write / compose / lint / doctor / svg / gallery / vary）、
-                  overlay.py（参照叠图）、算法模块；requirements.txt（可选依赖）
+                  overlay.py（参照叠图）、resize_glyphs.py（按目标字面高缩放，标题拉开大小用）、
+                  算法模块；requirements.txt（可选依赖）
 reference/        glyphs.md（骨架规范）、params.md（滤镜参数）、editor.md（编辑）、manual-svg.md（手写 SVG）
 assets/           glyphs.json（空字库模板，新建工程的默认预设）
 ```
